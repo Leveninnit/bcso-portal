@@ -58,6 +58,9 @@
               <textarea id="summary" name="summary" required minlength="10" placeholder="What did you do this shift? Patrols, arrests, notable incidents, etc."></textarea>
               <span class="hint">Minimum 10 characters.</span>
             </div>
+            <!-- Extra per-subdivision questions, configured on the Command
+                 Access dashboard, are rendered here by assets/log.js. -->
+            <div id="custom-questions"></div>
             <input type="hidden" id="subdivisionSlug" name="subdivisionSlug" />
             <input type="hidden" id="subdivisionName" name="subdivisionName" />
             <input type="hidden" id="formLoadedAt" name="formLoadedAt" />

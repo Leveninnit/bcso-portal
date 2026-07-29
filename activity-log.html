@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Activity Log — BCSO</title>
+  <meta name="description" content="Log your shift activity for your Blaine County Sheriff's Office subdivision: TEU, OCD, NRED, or RTD." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section>
+      <div class="container">
+        <div class="breadcrumb"><a href="index.html">Home</a> / Activity Log</div>
+        <h1 class="page-title">Subdivision Activity Log</h1>
+        <p class="page-sub">
+          Select your subdivision below to log your shift activity. Your
+          entry is sent directly to command staff on Discord.
+        </p>
+        <div id="sub-grid" class="sub-grid">
+          <!-- populated by JS from assets/subdivisions.js -->
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/subdivisions.js"></script>
+  <script src="assets/main.js"></script>
+  <script>
+    function renderCards() {
+      const grid = document.getElementById("sub-grid");
+      grid.innerHTML = SUBDIVISIONS.map((s) => `
+        <div class="panel sub-card">
+          <span class="badge-tag">${s.short}</span>
+          <h3>${s.name}</h3>
+          <p>${s.description}</p>
+          <a class="btn btn-gold" href="log.html?div=${encodeURIComponent(s.slug)}">Log Activity</a>
+        </div>
+      `).join("");
+    }
+    document.addEventListener("DOMContentLoaded", renderCards);
+  </script>
+</body>
+</html>

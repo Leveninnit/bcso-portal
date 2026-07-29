@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Master Documents — BCSO</title>
+  <meta name="description" content="Master Roster, SOP, and other official Blaine County Sheriff's Office documents." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section>
+      <div class="container">
+        <div class="breadcrumb"><a href="index.html">Home</a> / Master Documents</div>
+        <h1 class="page-title">Master Documents</h1>
+        <p class="page-sub">
+          Official department documents, kept up to date in Google Docs.
+          Each link opens the live document in a new tab so you always
+          see the current version.
+        </p>
+        <div id="doc-grid" class="sub-grid">
+          <!-- populated by JS from assets/documents.js -->
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/documents.js"></script>
+  <script src="assets/main.js"></script>
+  <script>
+    function renderCards() {
+      const grid = document.getElementById("doc-grid");
+      grid.innerHTML = DOCUMENTS.map((d) => `
+        <div class="panel sub-card">
+          <h3>${d.name}</h3>
+          <p>${d.description}</p>
+          <a class="btn btn-gold" href="${d.url}" target="_blank" rel="noopener">Open Document</a>
+        </div>
+      `).join("");
+    }
+    document.addEventListener("DOMContentLoaded", renderCards);
+  </script>
+</body>
+</html>

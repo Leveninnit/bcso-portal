@@ -4,12 +4,15 @@
     paragraph: "Paragraph",
     dropdown: "Dropdown",
   };
+  const MOVEMENT_TAB_SLUG = "__deputy_movement__";
 
   let mySubdivisions = [];
   let activeSlug = null;
   let activeFormType = "application"; // "application" | "log"
   let activeInnerTab = "review"; // "review" | "customize"
   let questionLabelCache = {}; // `${slug}:${type}` -> { [questionId]: label }
+  let movementInnerTab = "generate"; // "generate" | "customize"
+  let movementTemplatesCache = null;
 
   function el(id) {
     return document.getElementById(id);
@@ -64,22 +67,26 @@
 
     if (!mySubdivisions.length) {
       el("ca-no-subs").style.display = "block";
-      return;
     }
 
+    // Deputy Movement is department-wide (anyone with Command Login can
+    // use it), so the tabs — and a default tab to land on — always
+    // render even if this person has no subdivision command role.
     renderSubTabs();
-    activeSlug = mySubdivisions[0];
+    activeSlug = mySubdivisions.length ? mySubdivisions[0] : MOVEMENT_TAB_SLUG;
     renderSubContent();
   }
 
   function renderSubTabs() {
     const wrap = el("ca-sub-tabs");
-    wrap.innerHTML = mySubdivisions
+    const subTabsHtml = mySubdivisions
       .map((slug) => {
         const info = subInfo(slug);
         return `<button type="button" class="ca-tab-btn" data-slug="${slug}">${escapeHtml(info.short)}</button>`;
       })
       .join("");
+    const movementTabHtml = `<button type="button" class="ca-tab-btn" data-slug="${MOVEMENT_TAB_SLUG}">Deputy Movement</button>`;
+    wrap.innerHTML = subTabsHtml + movementTabHtml;
     wrap.querySelectorAll("button").forEach((btn) => {
       btn.addEventListener("click", () => {
         activeSlug = btn.dataset.slug;
@@ -98,9 +105,15 @@
 
   function renderSubContent() {
     updateActiveTabStyles();
+    const container = el("ca-sub-content");
+
+    if (activeSlug === MOVEMENT_TAB_SLUG) {
+      renderMovementTab(container);
+      return;
+    }
+
     const info = subInfo(activeSlug);
     const showApplications = !info.logOnly;
-    const container = el("ca-sub-content");
 
     const innerTabsHtml = `
       <div class="ca-inner-tabs" id="ca-form-type-tabs">
@@ -442,6 +455,229 @@
       }
       renderQuestionForm(null);
       loadQuestions();
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Deputy Movement — department-wide copy-paste generator + templates
+  // ---------------------------------------------------------------------
+  function renderMovementTab(container) {
+    container.innerHTML = `
+      <div class="ca-inner-tabs" id="ca-movement-tabs">
+        <button type="button" class="ca-inner-tab-btn" data-tab="generate">Generate</button>
+        <button type="button" class="ca-inner-tab-btn" data-tab="customize">Customize Templates</button>
+      </div>
+      <div id="ca-movement-panel"></div>
+    `;
+    container.querySelectorAll("#ca-movement-tabs button").forEach((btn) => {
+      btn.classList.toggle("active", btn.dataset.tab === movementInnerTab);
+      btn.addEventListener("click", () => {
+        movementInnerTab = btn.dataset.tab;
+        renderMovementTab(container);
+      });
+    });
+    if (movementInnerTab === "generate") {
+      renderMovementGenerate();
+    } else {
+      renderMovementCustomize();
+    }
+  }
+
+  function todayAmerican() {
+    const d = new Date();
+    const mm = String(d.getMonth() + 1).padStart(2, "0");
+    const dd = String(d.getDate()).padStart(2, "0");
+    const yy = String(d.getFullYear()).slice(-2);
+    return `${mm}/${dd}/${yy}`;
+  }
+
+  async function fetchMovementTemplates(force) {
+    if (movementTemplatesCache && !force) return movementTemplatesCache;
+    try {
+      const res = await fetch("/api/admin/movement-templates", { cache: "no-store" });
+      const data = await res.json();
+      movementTemplatesCache = data.templates || [];
+    } catch {
+      movementTemplatesCache = [];
+    }
+    return movementTemplatesCache;
+  }
+
+  async function renderMovementGenerate() {
+    const panel = el("ca-movement-panel");
+    panel.innerHTML = `
+      <div class="panel">
+        <p class="ca-muted">Enter the deputy's Discord ID and a date, then copy whichever message applies straight into the movements channel.</p>
+        <div class="form-row">
+          <label for="ca-mv-discord-id">Discord ID</label>
+          <input type="text" id="ca-mv-discord-id" placeholder="e.g. 123456789012345678" />
+        </div>
+        <div class="form-row">
+          <label for="ca-mv-date">Date</label>
+          <input type="text" id="ca-mv-date" value="${todayAmerican()}" placeholder="MM/DD/YY" />
+        </div>
+        <div id="ca-mv-templates">Loading…</div>
+      </div>
+    `;
+    el("ca-mv-discord-id").addEventListener("input", renderMovementResults);
+    el("ca-mv-date").addEventListener("input", renderMovementResults);
+    await renderMovementResults();
+  }
+
+  async function renderMovementResults() {
+    const box = el("ca-mv-templates");
+    if (!box) return;
+    const templates = await fetchMovementTemplates();
+    const discordId = el("ca-mv-discord-id")?.value.trim();
+    const date = el("ca-mv-date")?.value.trim() || todayAmerican();
+    if (!templates.length) {
+      box.innerHTML = `<p class="ca-muted">No templates yet — add one under "Customize Templates".</p>`;
+      return;
+    }
+    box.innerHTML = templates
+      .map((t) => {
+        const text = discordId
+          ? `<@${discordId}> → ${t.roleIds.map((r) => `<@&${r}>`).join(" & ")} | ${date}`
+          : "";
+        return `
+          <div class="ca-movement-row">
+            <div class="ca-movement-name">${escapeHtml(t.name)}</div>
+            <input type="text" class="ca-movement-output" readonly value="${escapeHtml(text)}" placeholder="Enter a Discord ID above" />
+            <button type="button" class="ca-btn-accept" data-copy-for="${t.id}" ${discordId ? "" : "disabled"}>Copy</button>
+          </div>
+        `;
+      })
+      .join("");
+    box.querySelectorAll("[data-copy-for]").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const row = btn.closest(".ca-movement-row");
+        const value = row.querySelector(".ca-movement-output").value;
+        if (!value) return;
+        try {
+          await navigator.clipboard.writeText(value);
+          const original = btn.textContent;
+          btn.textContent = "Copied!";
+          setTimeout(() => (btn.textContent = original), 1200);
+        } catch {
+          alert("Couldn't copy automatically — select the text in the box and copy it manually.");
+        }
+      });
+    });
+  }
+
+  async function renderMovementCustomize() {
+    const panel = el("ca-movement-panel");
+    panel.innerHTML = `
+      <div class="panel">
+        <p class="ca-muted">Add, edit, or remove the templates available on the Generate tab. Each template pings one or more Discord roles — anyone with the Command Login role can manage these.</p>
+        <div id="ca-mv-template-list">Loading…</div>
+        <div class="ca-question-form" id="ca-mv-template-form"></div>
+      </div>
+    `;
+    renderMovementTemplateForm(null);
+    await loadMovementTemplateList();
+  }
+
+  async function loadMovementTemplateList() {
+    const list = el("ca-mv-template-list");
+    try {
+      const templates = await fetchMovementTemplates(true);
+      if (!templates.length) {
+        list.innerHTML = `<p class="ca-muted">No templates yet.</p>`;
+        return;
+      }
+      list.innerHTML = templates
+        .map(
+          (t) => `
+          <div class="ca-question-row">
+            <div>
+              <strong>${escapeHtml(t.name)}</strong>
+              <div class="ca-question-meta">${t.roleIds.map((r) => escapeHtml(r)).join(", ")}</div>
+            </div>
+            <div class="ca-actions">
+              <button class="ca-btn-delete" data-mvaction="edit" data-mvid="${t.id}">Edit</button>
+              <button class="ca-btn-reject" data-mvaction="delete" data-mvid="${t.id}">Delete</button>
+            </div>
+          </div>
+        `
+        )
+        .join("");
+      list.querySelectorAll("[data-mvaction]").forEach((btn) => {
+        btn.addEventListener("click", () => handleMovementTemplateAction(btn.dataset.mvaction, templates, btn.dataset.mvid));
+      });
+    } catch {
+      list.innerHTML = `<p class="ca-muted">Couldn't load templates. Try refreshing.</p>`;
+    }
+  }
+
+  async function handleMovementTemplateAction(action, templates, id) {
+    const t = templates.find((x) => String(x.id) === String(id));
+    if (!t) return;
+    if (action === "delete") {
+      if (!confirm(`Delete template "${t.name}"? This can't be undone.`)) return;
+      await fetch(`/api/admin/movement-templates?id=${t.id}`, { method: "DELETE" });
+      movementTemplatesCache = null;
+      await loadMovementTemplateList();
+      return;
+    }
+    if (action === "edit") {
+      renderMovementTemplateForm(t);
+    }
+  }
+
+  function renderMovementTemplateForm(editing) {
+    const formBox = el("ca-mv-template-form");
+    const isEdit = !!editing;
+    formBox.innerHTML = `
+      <h4>${isEdit ? "Edit template" : "Add a template"}</h4>
+      <div class="form-row">
+        <label>Template name</label>
+        <input type="text" id="ca-mv-t-name" value="${escapeHtml(editing?.name || "")}" placeholder="e.g. Suspending" />
+      </div>
+      <div class="form-row">
+        <label>Role ID(s) to ping</label>
+        <input type="text" id="ca-mv-t-roles" value="${escapeHtml((editing?.roleIds || []).join(", "))}" placeholder="e.g. 1283145857176440923, 1285706620374093854" />
+        <p class="ca-muted" style="margin-top:0.35rem;">Separate multiple role IDs with commas. In Discord, enable Developer Mode, then right-click a role → Copy Role ID.</p>
+      </div>
+      <div class="ca-actions">
+        <button class="ca-btn-accept" id="ca-mv-t-save">${isEdit ? "Save changes" : "Add template"}</button>
+        ${isEdit ? `<button class="ca-btn-delete" id="ca-mv-t-cancel">Cancel</button>` : ""}
+      </div>
+    `;
+    if (isEdit) {
+      el("ca-mv-t-cancel").addEventListener("click", () => renderMovementTemplateForm(null));
+    }
+    el("ca-mv-t-save").addEventListener("click", async () => {
+      const name = el("ca-mv-t-name").value.trim();
+      const roleIds = el("ca-mv-t-roles")
+        .value.split(",")
+        .map((r) => r.trim())
+        .filter(Boolean);
+      if (!name) {
+        alert("Please enter a template name.");
+        return;
+      }
+      if (!roleIds.length || !roleIds.every((r) => /^\d{5,25}$/.test(r))) {
+        alert("Enter one or more valid numeric Discord role IDs, separated by commas.");
+        return;
+      }
+      const payload = { name, roleIds };
+      if (isEdit) {
+        await fetch("/api/admin/movement-templates", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, id: editing.id, sortOrder: editing.sortOrder }),
+        });
+      } else {
+        await fetch("/api/admin/movement-templates", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, sortOrder: 9999 }),
+        });
+      }
+      movementTemplatesCache = null;
+      renderMovementTemplateForm(null);
+      await loadMovementTemplateList();
     });
   }
 

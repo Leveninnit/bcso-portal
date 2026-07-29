@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Command Access — BCSO</title>
+  <meta name="description" content="Command staff dashboard: review applications and activity logs, and customize each subdivision's questions." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+  <link rel="stylesheet" href="assets/command-access.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section>
+      <div class="container">
+        <div class="breadcrumb"><a href="index.html">Home</a> / Command Access</div>
+        <h1 class="page-title">Command Access</h1>
+        <p class="page-sub" id="ca-subtitle">Sign in with Discord to review applications and activity logs.</p>
+
+        <div class="panel" id="ca-error" style="display:none; border-color: var(--danger, #b33);"></div>
+
+        <div class="panel" id="ca-login-gate">
+          <p>You need the Command Login role in Discord to access this dashboard.</p>
+          <a class="btn btn-gold" href="/api/auth/login">Login with Discord</a>
+        </div>
+
+        <div id="ca-dashboard" style="display:none;">
+          <div class="panel ca-toprow">
+            <span id="ca-whoami"></span>
+            <a class="btn btn-outline" href="/api/auth/logout">Log out</a>
+          </div>
+
+          <div class="panel" id="ca-no-subs" style="display:none;">
+            <p>You're logged in, but you don't hold a subdivision command role, so there's nothing here to manage yet.</p>
+          </div>
+
+          <div id="ca-sub-tabs" class="ca-tabs"></div>
+
+          <div id="ca-sub-content"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/subdivisions.js"></script>
+  <script src="assets/main.js"></script>
+  <script src="assets/command-access.js"></script>
+</body>
+</html>

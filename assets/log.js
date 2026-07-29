@@ -5,6 +5,59 @@
   function findSubdivision(slug) {
     return (window.SUBDIVISIONS || []).find((s) => s.slug === slug);
   }
+  function escapeHtml(str) {
+    return (str ?? "").toString().replace(/[&<>"']/g, (c) => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;",
+    }[c]));
+  }
+  // Extra per-subdivision questions configured by command staff on the
+  // Command Access dashboard — rendered beneath the fixed fields above.
+  // See assets/command-access.js for the customizer that manages these.
+  function renderCustomQuestionField(q) {
+    const requiredAttr = q.required ? "required" : "";
+    const requiredMark = q.required ? " *" : "";
+    const labelHtml = `<label for="cq-${q.id}">${escapeHtml(q.label)}${requiredMark}</label>`;
+    if (q.questionType === "paragraph") {
+      return `<div class="form-row">${labelHtml}<textarea id="cq-${q.id}" data-qid="${q.id}" ${requiredAttr}></textarea></div>`;
+    }
+    if (q.questionType === "dropdown") {
+      const options = (q.options || [])
+        .map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`)
+        .join("");
+      return `<div class="form-row">${labelHtml}<select id="cq-${q.id}" data-qid="${q.id}" ${requiredAttr}><option value="">Select…</option>${options}</select></div>`;
+    }
+    return `<div class="form-row">${labelHtml}<input type="text" id="cq-${q.id}" data-qid="${q.id}" ${requiredAttr} /></div>`;
+  }
+  async function renderCustomQuestions(slug) {
+    const container = document.getElementById("custom-questions");
+    if (!container) return;
+    container.innerHTML = "";
+    if (!slug || slug === "general") return;
+    try {
+      const res = await fetch(`/api/questions?div=${encodeURIComponent(slug)}&type=log`, {
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+      const questions = data.questions || [];
+      if (!questions.length) return;
+      container.innerHTML = questions.map(renderCustomQuestionField).join("");
+    } catch {
+      // Custom questions are optional extras — if they fail to load, just
+      // skip them rather than blocking the whole form.
+    }
+  }
+  function collectCustomAnswers() {
+    const answers = {};
+    document.querySelectorAll("#custom-questions [data-qid]").forEach((el) => {
+      const val = typeof el.value === "string" ? el.value.trim() : el.value;
+      if (val) answers[el.dataset.qid] = val;
+    });
+    return answers;
+  }
   function initPage() {
     const slug = getQueryParam("div");
     const sub = findSubdivision(slug);
@@ -27,6 +80,7 @@
       document.getElementById("subdivisionName").value = "General";
     }
     document.getElementById("formLoadedAt").value = Date.now().toString();
+    renderCustomQuestions(document.getElementById("subdivisionSlug").value);
   }
   function showAlert(el, message) {
     if (message) el.textContent = message;
@@ -81,6 +135,7 @@
       subdivisionName: document.getElementById("subdivisionName").value,
       formLoadedAt: document.getElementById("formLoadedAt").value,
       website: honeypot,
+      answers: collectCustomAnswers(),
     };
     if (honeypot) {
       // Pretend it worked so bots don't learn anything, but don't call the API.

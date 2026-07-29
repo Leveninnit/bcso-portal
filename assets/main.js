@@ -5,25 +5,21 @@
  */
 const NAV_LINKS = [
   { href: "index.html", label: "Home" },
-  { href: "documents.html", label: "Master Documents" },
   { href: "applications.html", label: "Applications" },
   { href: "activity-log.html", label: "Activity Log" },
-  // Add future sections here, e.g.:
-  // { href: "roster.html", label: "Roster" },
+  { href: "documents.html", label: "Documents" },
+  { href: "command-access.html", label: "Command Access" },
 ];
 function currentPage() {
-  // Cloudflare Pages serves clean URLs (e.g. "/applications" instead of
-  // "/applications.html"), so compare without the extension on both sides.
-  let path = window.location.pathname.split("/").pop() || "index.html";
-  path = path.replace(/\.html$/, "");
-  return path === "" ? "index" : path;
+  const path = window.location.pathname.split("/").pop() || "index.html";
+  return path;
 }
 function renderHeader() {
   const active = currentPage();
-  const links = NAV_LINKS.map((l) => {
-    const linkPage = l.href.replace(/\.html$/, "");
-    return `<a href="${l.href}"${linkPage === active ? ' class="active"' : ""}>${l.label}</a>`;
-  }).join("");
+  const links = NAV_LINKS.map(
+    (l) =>
+      `<a href="${l.href}"${l.href === active ? ' class="active"' : ""}>${l.label}</a>`
+  ).join("");
   return `
   <header class="site-header">
     <div class="container">
@@ -31,7 +27,7 @@ function renderHeader() {
         <img src="assets/bcso-crest.png" alt="BCSO Crest" />
         <span class="brand-text">
           <strong>Blaine County Sheriff's Office</strong>
-          <span>Official Department Portal</span>
+          <span>Official Applications Portal</span>
         </span>
       </a>
       <nav class="main-nav">${links}</nav>

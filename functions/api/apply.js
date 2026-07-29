@@ -2,19 +2,31 @@
  * Cloudflare Pages Function
  * POST /api/apply
  *
- * Receives a subdivision application from apply.html, validates + sanitizes
- * it, builds a formatted Discord embed, and forwards it to a Discord
- * webhook. The webhook URL(s) live only in Cloudflare's environment
- * variables (Settings → Environment variables → add as "Secret" in the
- * Pages dashboard) — they are never present in this repo or in any
- * client-side code, so nobody who views the site's source can find or
- * abuse them.
+ * Receives a subdivision application from apply.html, validates +
+ * sanitizes it, builds a formatted Discord embed, pings the
+ * subdivision's command role plus the applicant, forwards it to a
+ * Discord webhook, and (if a D1 database is bound as "DB") records the
+ * submission so Command Access can list/accept/reject/delete it later.
+ *
+ * The webhook URL(s) live only in Cloudflare's environment variables
+ * (Settings → Environment variables → add as "Secret" in the Pages
+ * dashboard) — they are never present in this repo or in any
+ * client-side code.
  *
  * Optional per-subdivision routing: if you want a subdivision's
- * applications to go to a *different* Discord channel, add a secret named
- * DISCORD_WEBHOOK_<SLUG> (e.g. DISCORD_WEBHOOK_TEU). Otherwise everything
- * falls back to DISCORD_WEBHOOK_URL.
+ * applications to go to a *different* Discord channel, add a secret
+ * named DISCORD_WEBHOOK_<SLUG> (e.g. DISCORD_WEBHOOK_TEU). Otherwise
+ * everything falls back to DISCORD_WEBHOOK_URL.
+ *
+ * `answers` (optional): an object of { questionId: answerText } for any
+ * extra custom questions Command staff configured for this
+ * subdivision's application form (see /api/questions and Command
+ * Access). Missing or malformed `answers` never blocks submission —
+ * custom questions are additive, not required for the base form to
+ * work.
  */
+import { SUBDIVISION_COMMAND_ROLES } from "../_lib/discord.js";
+
 const FIELD_LIMITS = {
   characterName: 100,
   discordId: 100,
@@ -29,6 +41,15 @@ function clean(value, maxLen) {
   if (typeof value !== "string") return "";
   // Trim, collapse excessive whitespace, hard-truncate to Discord's limits.
   return value.trim().replace(/\s+/g, " ").slice(0, maxLen);
+}
+function cleanAnswers(answers) {
+  if (!answers || typeof answers !== "object") return {};
+  const out = {};
+  for (const [key, value] of Object.entries(answers)) {
+    if (!/^\d+$/.test(String(key))) continue; // question ids are numeric
+    out[key] = clean(String(value ?? ""), 500);
+  }
+  return out;
 }
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
@@ -80,6 +101,7 @@ export async function onRequestPost(context) {
   const experience = clean(data.experience, FIELD_LIMITS.experience);
   const subdivisionName = clean(data.subdivisionName, FIELD_LIMITS.subdivisionName);
   const subdivisionSlug = clean(data.subdivisionSlug, 30).toLowerCase().replace(/[^a-z0-9_-]/g, "");
+  const answers = cleanAnswers(data.answers);
   if (whyJoin.length < 20) {
     return jsonResponse({ error: "Please write at least 20 characters for 'why do you want to join'." }, 400);
   }
@@ -89,37 +111,55 @@ export async function onRequestPost(context) {
   if (!webhookUrl) {
     console.error("No Discord webhook configured (checked", perSubKey, "and DISCORD_WEBHOOK_URL)");
     return jsonResponse(
-      { error: "Applications are temporarily unavailable. Please try again later or contact command staff on Discord." },
+      { error: "Applications are temporarily unavailable. Please try again later or contact command staff." },
       500
     );
   }
   // --- Build the embed ---------------------------------------------------
   const origin = new URL(request.url).origin;
   const crestUrl = `${origin}/assets/bcso-crest.png`;
+  const fields = [
+    { name: "Character Name", value: characterName, inline: true },
+    { name: "Discord ID", value: discordId, inline: true },
+    { name: "Badge Number", value: badgeNumber, inline: true },
+    { name: "Current Rank", value: rank, inline: true },
+    { name: "Subdivision", value: subdivisionName, inline: true },
+    { name: "​", value: "​", inline: true }, // spacer for a clean 2-column grid
+    { name: "Why do you want to join?", value: whyJoin, inline: false },
+    { name: "Relevant Experience", value: experience, inline: false },
+  ];
+  for (const [, value] of Object.entries(answers)) {
+    if (value) fields.push({ name: "Additional Question", value, inline: false });
+  }
   const embed = {
     title: `New ${subdivisionName} Application`,
     color: 0xc9a227, // BCSO gold
     thumbnail: { url: crestUrl },
-    fields: [
-      { name: "Character Name", value: characterName, inline: true },
-      { name: "Discord Username", value: discordId, inline: true },
-      { name: "Badge Number", value: badgeNumber, inline: true },
-      { name: "Current Rank", value: rank, inline: true },
-      { name: "Subdivision", value: subdivisionName, inline: true },
-      { name: "​", value: "​", inline: true }, // spacer for a clean 2-column grid
-      { name: "Why do you want to join?", value: whyJoin, inline: false },
-      { name: "Relevant Experience", value: experience, inline: false },
-    ],
+    fields,
     footer: { text: "Blaine County Sheriff's Office • Applications Portal" },
     timestamp: new Date().toISOString(),
   };
+  // Ping the subdivision's command role (if one's configured) and the
+  // applicant themselves, so nobody has to go looking for this. Real
+  // pings only happen for these two explicitly-allowed IDs — nothing a
+  // user types in a text field can trigger @everyone or any other ping.
+  const commandRoleId = SUBDIVISION_COMMAND_ROLES[subdivisionSlug];
+  const mentionParts = [];
+  const allowedMentions = { parse: [], roles: [], users: [] };
+  if (commandRoleId) {
+    mentionParts.push(`<@&${commandRoleId}>`);
+    allowedMentions.roles.push(commandRoleId);
+  }
+  if (/^\d{15,25}$/.test(discordId)) {
+    mentionParts.push(`<@${discordId}>`);
+    allowedMentions.users.push(discordId);
+  }
   const discordPayload = {
     username: "BCSO Applications",
     avatar_url: crestUrl,
+    content: mentionParts.length ? mentionParts.join(" ") : undefined,
     embeds: [embed],
-    // Belt-and-braces: even if someone smuggles "@everyone" into a text
-    // field, Discord will render it as plain text, never as a real ping.
-    allowed_mentions: { parse: [] },
+    allowed_mentions: allowedMentions,
   };
   try {
     const discordRes = await fetch(webhookUrl, {
@@ -135,6 +175,27 @@ export async function onRequestPost(context) {
   } catch (err) {
     console.error("Failed to reach Discord webhook:", err);
     return jsonResponse({ error: "Could not reach Discord right now. Please try again in a moment." }, 502);
+  }
+  // --- Record it for Command Access (best-effort; never blocks the applicant) ---
+  if (env.DB) {
+    try {
+      await env.DB.prepare(
+        `INSERT INTO submissions (subdivision_slug, form_type, discord_id, character_name, badge_number, rank, core_fields_json, answers_json)
+         VALUES (?, 'application', ?, ?, ?, ?, ?, ?)`
+      )
+        .bind(
+          subdivisionSlug,
+          discordId,
+          characterName,
+          badgeNumber,
+          rank,
+          JSON.stringify({ whyJoin, experience }),
+          JSON.stringify(answers)
+        )
+        .run();
+    } catch (err) {
+      console.error("Failed to record application in D1 (non-fatal):", err);
+    }
   }
   return jsonResponse({ ok: true }, 200);
 }

@@ -30,14 +30,17 @@
  * If the roster isn't configured yet, or the lookup fails for any
  * reason, this fails soft (found: false) so the application/log forms
  * keep working — auto-fill is a convenience, never a requirement.
+ *
+ * TEMPORARY: pass &debug=1 to get back the parsed header row and row
+ * count (no personal data) so mismatches between the sheet's column
+ * names/formatting and this function's expectations can be diagnosed.
+ * Remove this block once auto-fill is confirmed working.
  */
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
     status,
     headers: {
       "Content-Type": "application/json",
-      // Never let this be cached by shared/browser caches — it's a
-      // per-person lookup, not static content.
       "Cache-Control": "no-store",
     },
   });
@@ -45,9 +48,6 @@ function jsonResponse(body, status) {
 function normalizeId(value) {
   return (value || "").toString().replace(/[^0-9]/g, "");
 }
-// Minimal CSV parser: handles quoted fields, embedded commas, embedded
-// quotes ("") and embedded newlines inside quotes — everything Google
-// Sheets' CSV export can produce.
 function parseCSV(text) {
   const rows = [];
   let row = [];
@@ -101,33 +101,74 @@ export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const discordId = normalizeId(url.searchParams.get("discordId"));
-  if (!discordId) {
-    return jsonResponse({ found: false, error: "Missing discordId." }, 400);
-  }
+  const debug = url.searchParams.get("debug");
   const sheetId = env.ROSTER_SHEET_ID;
   const gid = env.ROSTER_SHEET_GID || "0";
   if (!sheetId) {
-    // Roster lookup isn't configured — fail soft.
-    return jsonResponse({ found: false }, 200);
+    return jsonResponse(
+      debug ? { found: false, debug: "ROSTER_SHEET_ID not set" } : { found: false },
+      200
+    );
   }
   const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
   let rows;
+  let fetchStatus = null;
   try {
     const res = await fetch(csvUrl);
-    if (!res.ok) return jsonResponse({ found: false }, 200);
+    fetchStatus = res.status;
+    if (!res.ok) {
+      return jsonResponse(
+        debug ? { found: false, debug: "fetch failed", fetchStatus } : { found: false },
+        200
+      );
+    }
     const text = await res.text();
     rows = parseCSV(text);
-  } catch {
-    return jsonResponse({ found: false }, 200);
+  } catch (e) {
+    return jsonResponse(
+      debug ? { found: false, debug: "fetch threw", error: String(e) } : { found: false },
+      200
+    );
   }
-  if (!rows.length) return jsonResponse({ found: false }, 200);
-  // First row is the header — match columns by name (not position) so
-  // this keeps working even if columns get reordered in the sheet later.
+  if (!rows.length) {
+    return jsonResponse(
+      debug ? { found: false, debug: "no rows parsed", fetchStatus } : { found: false },
+      200
+    );
+  }
   const header = rows[0].map((h) => h.trim().toLowerCase());
   const idxDiscordId = findColumn(header, "discord id", "discord");
   const idxName = findColumn(header, "name");
   const idxBadge = findColumn(header, "badge number", "badge");
   const idxRank = findColumn(header, "rank");
+
+  if (debug) {
+    // Show the header row, row count, and the raw (unmodified) contents
+    // of the Discord ID column for every row so mis-formatted cells
+    // (e.g. Google turning a long ID into scientific notation) are
+    // visible. No names/badges/ranks are included.
+    const rawDiscordCells =
+      idxDiscordId !== -1
+        ? rows.slice(1).map((r) => r[idxDiscordId])
+        : [];
+    return jsonResponse(
+      {
+        found: false,
+        debug: "ok",
+        fetchStatus,
+        header,
+        rowCount: rows.length - 1,
+        idxDiscordId,
+        rawDiscordCells,
+        normalizedInput: discordId,
+      },
+      200
+    );
+  }
+
+  if (!discordId) {
+    return jsonResponse({ found: false, error: "Missing discordId." }, 400);
+  }
   if (idxDiscordId === -1) return jsonResponse({ found: false }, 200);
   const match = rows
     .slice(1)

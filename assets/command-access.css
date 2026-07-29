@@ -3,149 +3,227 @@
    stylesheet other pages depend on. */
 
 .ca-toprow {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     gap: 1rem;
+     margin-bottom: 1.5rem;
 }
 
 .ca-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
+     display: flex;
+     flex-wrap: wrap;
+     gap: 0.5rem;
+     margin-bottom: 1.5rem;
 }
 .ca-tab-btn {
-  padding: 0.5rem 1rem;
-  border-radius: 999px;
-  border: 1px solid rgba(201, 162, 39, 0.4);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
+     padding: 0.5rem 1rem;
+     border-radius: 999px;
+     border: 1px solid rgba(201, 162, 39, 0.4);
+     background: transparent;
+     color: inherit;
+     cursor: pointer;
+     font: inherit;
+     transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.ca-tab-btn:hover:not(.active) {
+     border-color: var(--gold-bright, #c9a227);
+     background: rgba(201, 162, 39, 0.1);
 }
 .ca-tab-btn.active {
-  background: var(--gold-bright, #c9a227);
-  color: #14210f;
-  font-weight: 600;
+     background: var(--gold-bright, #c9a227);
+     color: #14210f;
+     font-weight: 600;
 }
 
 .ca-inner-tabs {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
+     display: flex;
+     flex-wrap: wrap;
+     gap: 0.5rem;
+     margin-bottom: 1rem;
 }
 .ca-inner-tab-btn {
-  padding: 0.4rem 0.9rem;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: transparent;
-  color: inherit;
-  cursor: pointer;
-  font: inherit;
+     padding: 0.4rem 0.9rem;
+     border-radius: 6px;
+     border: 1px solid rgba(255, 255, 255, 0.15);
+     background: transparent;
+     color: inherit;
+     cursor: pointer;
+     font: inherit;
+     transition: border-color 0.15s ease, color 0.15s ease;
+}
+.ca-inner-tab-btn:hover:not(.active) {
+     border-color: rgba(201, 162, 39, 0.6);
+     color: var(--gold-bright, #c9a227);
 }
 .ca-inner-tab-btn.active {
-  border-color: var(--gold-bright, #c9a227);
-  color: var(--gold-bright, #c9a227);
+     border-color: var(--gold-bright, #c9a227);
+     color: var(--gold-bright, #c9a227);
 }
 
 .ca-section-title {
-  text-transform: uppercase;
-  font-size: 0.85rem;
-  letter-spacing: 0.04em;
-  color: var(--gold-bright, #c9a227);
-  margin: 1.5rem 0 0.75rem;
+     text-transform: uppercase;
+     font-size: 0.85rem;
+     letter-spacing: 0.04em;
+     color: var(--gold-bright, #c9a227);
+     margin: 1.5rem 0 0.75rem;
 }
 
 .ca-submission-card {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-bottom: 0.75rem;
+     border: 1px solid rgba(255, 255, 255, 0.1);
+     border-radius: 8px;
+     padding: 1rem;
+     margin-bottom: 0.75rem;
+     transition: border-color 0.15s ease;
+}
+.ca-submission-card:hover {
+     border-color: rgba(255, 255, 255, 0.2);
 }
 .ca-submission-card .ca-status {
-  display: inline-block;
-  font-size: 0.75rem;
-  text-transform: uppercase;
-  letter-spacing: 0.03em;
-  padding: 0.15rem 0.6rem;
-  border-radius: 999px;
-  margin-left: 0.5rem;
+     display: inline-block;
+     font-size: 0.75rem;
+     text-transform: uppercase;
+     letter-spacing: 0.03em;
+     padding: 0.15rem 0.6rem;
+     border-radius: 999px;
+     margin-left: 0.5rem;
 }
 .ca-status.pending { background: rgba(201, 162, 39, 0.2); color: #c9a227; }
 .ca-status.accepted { background: rgba(44, 92, 58, 0.4); color: #6fbf8a; }
 .ca-status.rejected { background: rgba(140, 40, 40, 0.35); color: #e08080; }
 
 .ca-submission-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
-  gap: 0.5rem 1rem;
-  margin: 0.75rem 0;
-  font-size: 0.9rem;
+     display: grid;
+     grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+     gap: 0.5rem 1rem;
+     margin: 0.75rem 0;
+     font-size: 0.9rem;
 }
 .ca-submission-fields .label {
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 0.75rem;
-  text-transform: uppercase;
+     color: rgba(255, 255, 255, 0.55);
+     font-size: 0.75rem;
+     text-transform: uppercase;
 }
 
 .ca-actions {
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 0.5rem;
+     display: flex;
+     flex-wrap: wrap;
+     gap: 0.5rem;
+     margin-top: 0.5rem;
 }
 .ca-actions button {
-  padding: 0.35rem 0.9rem;
-  border-radius: 6px;
-  border: none;
-  cursor: pointer;
-  font: inherit;
+     padding: 0.35rem 0.9rem;
+     border-radius: 6px;
+     border: none;
+     cursor: pointer;
+     font: inherit;
+     transition: filter 0.15s ease, opacity 0.15s ease;
+}
+.ca-actions button:hover:not(:disabled) {
+     filter: brightness(1.15);
+}
+.ca-actions button:disabled {
+     opacity: 0.35;
+     cursor: not-allowed;
 }
 .ca-btn-accept { background: #2c5c3a; color: #eafaf0; }
 .ca-btn-reject { background: #7a2c2c; color: #fceaea; }
 .ca-btn-delete { background: rgba(255, 255, 255, 0.1); color: #eee; }
 
 .ca-question-row {
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 0.6rem;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-  flex-wrap: wrap;
+     border: 1px solid rgba(255, 255, 255, 0.1);
+     border-radius: 8px;
+     padding: 0.75rem 1rem;
+     margin-bottom: 0.6rem;
+     display: flex;
+     align-items: center;
+     justify-content: space-between;
+     gap: 1rem;
+     flex-wrap: wrap;
+     transition: border-color 0.15s ease;
+}
+.ca-question-row:hover {
+     border-color: rgba(255, 255, 255, 0.2);
 }
 .ca-question-meta {
-  font-size: 0.8rem;
-  color: rgba(255, 255, 255, 0.55);
+     font-size: 0.8rem;
+     color: rgba(255, 255, 255, 0.55);
+     margin-top: 0.15rem;
 }
 .ca-option-chip {
-  display: inline-block;
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  padding: 0.1rem 0.6rem;
-  margin: 0.15rem;
-  font-size: 0.8rem;
+     display: inline-block;
+     background: rgba(255, 255, 255, 0.08);
+     border-radius: 999px;
+     padding: 0.1rem 0.6rem;
+     margin: 0.15rem;
+     font-size: 0.8rem;
 }
 
 .ca-question-form {
-  border: 1px dashed rgba(201, 162, 39, 0.4);
-  border-radius: 8px;
-  padding: 1rem;
-  margin-top: 1rem;
+     border: 1px dashed rgba(201, 162, 39, 0.4);
+     border-radius: 8px;
+     padding: 1.25rem;
+     margin-top: 1rem;
+}
+.ca-question-form h4 {
+     margin: 0 0 1rem;
+     color: var(--gold-bright, #c9a227);
+     font-size: 1rem;
+}
+.ca-question-form .form-row {
+     margin-bottom: 1rem;
+}
+.ca-question-form .form-row:last-of-type {
+     margin-bottom: 0;
 }
 .ca-option-list-row {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 0.4rem;
+     display: flex;
+     gap: 0.5rem;
+     margin-bottom: 0.4rem;
 }
 .ca-option-list-row input {
-  flex: 1;
+     flex: 1;
 }
 
 .ca-muted {
-  color: rgba(255, 255, 255, 0.55);
-  font-size: 0.9rem;
+     color: rgba(255, 255, 255, 0.55);
+     font-size: 0.9rem;
+     line-height: 1.5;
+}
+
+/* Focus states — inputs/selects inherit style.css's base look, this
+   just makes keyboard/mouse focus clearly visible on this page too. */
+#ca-dashboard input[type="text"]:focus,
+#ca-dashboard textarea:focus,
+#ca-dashboard select:focus {
+     outline: 2px solid var(--gold-bright, #c9a227);
+     outline-offset: 1px;
+}
+
+/* Deputy Movement tab */
+.ca-movement-row {
+     display: flex;
+     align-items: center;
+     gap: 0.75rem;
+     margin-bottom: 0.6rem;
+     flex-wrap: wrap;
+}
+.ca-movement-name {
+     min-width: 110px;
+     font-weight: 600;
+}
+.ca-movement-output {
+     flex: 1;
+     min-width: 220px;
+     padding: 0.45rem 0.6rem;
+     border-radius: 6px;
+     border: 1px solid rgba(255, 255, 255, 0.15);
+     background: rgba(255, 255, 255, 0.04);
+     color: inherit;
+     font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+     font-size: 0.85rem;
+}
+.ca-movement-output::placeholder {
+     color: rgba(255, 255, 255, 0.35);
+     font-family: inherit;
 }

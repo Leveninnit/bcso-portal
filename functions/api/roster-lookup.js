@@ -3,9 +3,9 @@
  * GET /api/roster-lookup?discordId=...
  *
  * Looks up a single member in the Master Roster (Google Sheet) by Discord
- * ID and returns just that person's name / badge number / rank — never
- * the whole roster. Used by apply.html and log.html to auto-fill fields
- * so members don't have to re-type their own details.
+ * username and returns just that person's name / badge number / rank —
+ * never the whole roster. Used by apply.html and log.html to auto-fill
+ * fields so members don't have to re-type their own details.
  *
  * Requires two Cloudflare environment variables (Settings -> Environment
  * variables in the Pages dashboard):
@@ -36,8 +36,11 @@ function jsonResponse(body, status) {
     },
   });
 }
-function normalizeId(value) {
-  return (value || "").toString().replace(/[^0-9]/g, "");
+// Normalizes a Discord username for comparison: trims surrounding
+// whitespace, lowercases (Discord usernames are case-insensitive), and
+// strips a leading "@" in case someone pastes their handle that way.
+function normalizeUsername(value) {
+  return (value || "").toString().trim().toLowerCase().replace(/^@/, "");
 }
 // Minimal CSV parser: handles quoted fields, embedded commas, embedded
 // quotes ("") and embedded newlines inside quotes — everything Google
@@ -94,7 +97,7 @@ function findColumn(header, ...candidates) {
 export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
-  const discordId = normalizeId(url.searchParams.get("discordId"));
+  const discordId = normalizeUsername(url.searchParams.get("discordId"));
   if (!discordId) {
     return jsonResponse({ found: false, error: "Missing discordId." }, 400);
   }
@@ -118,14 +121,19 @@ export async function onRequestGet(context) {
   // First row is the header — match columns by name (not position) so
   // this keeps working even if columns get reordered in the sheet later.
   const header = rows[0].map((h) => h.trim().toLowerCase());
-  const idxDiscordId = findColumn(header, "discord id", "discord");
+  const idxDiscordId = findColumn(
+    header,
+    "discord username",
+    "discord id",
+    "discord"
+  );
   const idxName = findColumn(header, "name");
   const idxBadge = findColumn(header, "badge number", "badge");
   const idxRank = findColumn(header, "rank");
   if (idxDiscordId === -1) return jsonResponse({ found: false }, 200);
   const match = rows
     .slice(1)
-    .find((r) => normalizeId(r[idxDiscordId]) === discordId);
+    .find((r) => normalizeUsername(r[idxDiscordId]) === discordId);
   if (!match) return jsonResponse({ found: false }, 200);
   return jsonResponse(
     {

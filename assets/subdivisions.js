@@ -9,6 +9,9 @@
  * short       - short badge/acronym shown on cards
  * description - shown on the Applications page card and top of the form
  * requirements- optional bullet list shown on the form (array of strings)
+ * logOnly     - if true, this subdivision has no application form and is
+ *               excluded from the Applications page — it only appears on
+ *               the Activity Log page (e.g. SRT).
  */
 const SUBDIVISIONS = [
   {
@@ -57,6 +60,15 @@ const SUBDIVISIONS = [
       "Strong knowledge of SOPs and radio codes",
       "Patient, clear communicator",
     ],
+  },
+  {
+    slug: "srt",
+    name: "Special Response Team",
+    short: "SRT",
+    description:
+      "High-risk tactical unit handling barricaded suspects, warrant service, and other specialist operations. SRT does not take public applications through this portal — activity is tracked via the Activity Log only.",
+    requirements: [],
+    logOnly: true,
   },
 ];
 // Exposed as a global for plain <script> usage across pages.

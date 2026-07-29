@@ -33,7 +33,9 @@
   <script>
     function renderCards() {
       const grid = document.getElementById("sub-grid");
-      grid.innerHTML = SUBDIVISIONS.map((s) => `
+      // SRT is an activity-log-only subdivision (no public application form),
+      // so it's excluded from this page — see assets/subdivisions.js.
+      grid.innerHTML = SUBDIVISIONS.filter((s) => !s.logOnly).map((s) => `
         <div class="panel sub-card">
           <span class="badge-tag">${s.short}</span>
           <h3>${s.name}</h3>

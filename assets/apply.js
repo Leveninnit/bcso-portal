@@ -42,6 +42,32 @@
   function hideAlert(el) {
     el.classList.remove("show");
   }
+  // Auto-fill character name / badge / rank from the Master Roster when
+  // the Discord ID field loses focus. This is a convenience only — any
+  // failure (roster not configured, no match, network error) just
+  // leaves the fields as-is for manual entry.
+  async function handleDiscordIdBlur() {
+    const discordId = document.getElementById("discordId").value.trim();
+    const note = document.getElementById("autofill-note");
+    if (note) note.style.display = "none";
+    if (!discordId) return;
+    try {
+      const res = await fetch("/api/roster-lookup?discordId=" + encodeURIComponent(discordId));
+      const data = await res.json().catch(() => ({}));
+      if (data.found) {
+        if (data.name) document.getElementById("characterName").value = data.name;
+        if (data.badgeNumber) document.getElementById("badgeNumber").value = data.badgeNumber;
+        if (data.rank) document.getElementById("rank").value = data.rank;
+        if (note) {
+          note.textContent = "✓ Auto-filled from Master Roster";
+          note.style.color = "var(--success)";
+          note.style.display = "inline";
+        }
+      }
+    } catch {
+      // Roster lookup is a convenience — ignore failures quietly.
+    }
+  }
   async function handleSubmit(e) {
     e.preventDefault();
     const form = document.getElementById("app-form");
@@ -97,6 +123,7 @@
   }
   document.addEventListener("DOMContentLoaded", () => {
     initPage();
+    document.getElementById("discordId").addEventListener("blur", handleDiscordIdBlur);
     document.getElementById("app-form").addEventListener("submit", handleSubmit);
   });
 })();

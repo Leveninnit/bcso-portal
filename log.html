@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log Activity — BCSO</title>
+  <meta name="description" content="Log your shift activity for your Blaine County Sheriff's Office subdivision." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section>
+      <div class="container" style="max-width: 720px;">
+        <div class="breadcrumb"><a href="index.html">Home</a> / <a href="activity-log.html">Activity Log</a> / <span id="crumb-sub">Log Activity</span></div>
+        <h1 class="page-title" id="sub-title">Subdivision Activity Log</h1>
+        <p class="page-sub" id="sub-description"></p>
+        <div class="panel">
+          <form class="app-form" id="log-form" autocomplete="off">
+            <div class="alert alert-error" id="form-error"></div>
+            <div class="alert alert-success" id="form-success">
+              &#9989; Activity log submitted! Command staff has been notified on Discord. You can close this page.
+            </div>
+            <!-- honeypot: real users never see or fill this in -->
+            <div class="hp-field" aria-hidden="true">
+              <label for="website">Leave this field blank</label>
+              <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
+            </div>
+            <div class="form-row">
+              <label for="discordId">Discord Username *</label>
+              <input type="text" id="discordId" name="discordId" required placeholder="e.g. john_smith" />
+              <span class="hint" id="autofill-note" style="display:none;"></span>
+            </div>
+            <div class="two-col">
+              <div class="form-row">
+                <label for="characterName">In-Game / Character Name *</label>
+                <input type="text" id="characterName" name="characterName" required placeholder="e.g. John Smith" />
+              </div>
+              <div class="form-row">
+                <label for="badgeNumber">Current Badge Number *</label>
+                <input type="text" id="badgeNumber" name="badgeNumber" required placeholder="e.g. 1042" />
+              </div>
+            </div>
+            <div class="two-col">
+              <div class="form-row">
+                <label for="rank">Current Rank *</label>
+                <input type="text" id="rank" name="rank" required placeholder="e.g. Deputy Sheriff II" />
+              </div>
+              <div class="form-row">
+                <label for="hoursOnDuty">Hours on Duty *</label>
+                <input type="number" id="hoursOnDuty" name="hoursOnDuty" required min="0.25" max="24" step="0.25" placeholder="e.g. 2.5" />
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="summary">Shift Summary *</label>
+              <textarea id="summary" name="summary" required minlength="10" placeholder="What did you do this shift? Patrols, arrests, notable incidents, etc."></textarea>
+              <span class="hint">Minimum 10 characters.</span>
+            </div>
+            <input type="hidden" id="subdivisionSlug" name="subdivisionSlug" />
+            <input type="hidden" id="subdivisionName" name="subdivisionName" />
+            <input type="hidden" id="formLoadedAt" name="formLoadedAt" />
+            <button type="submit" class="btn btn-gold" id="submit-btn">Submit Log</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/subdivisions.js"></script>
+  <script src="assets/main.js"></script>
+  <script src="assets/log.js"></script>
+</body>
+</html>

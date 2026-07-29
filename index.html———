@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Blaine County Sheriff's Office — Portal</title>
+  <meta name="description" content="Official portal for the Blaine County Sheriff's Office FiveM roleplay department. Apply to a subdivision below." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section class="hero">
+      <div class="container">
+        <img class="crest" src="assets/bcso-crest.png" alt="Blaine County Sheriff's Office Crest" />
+        <h1>Blaine County Sheriff's Office</h1>
+        <div class="motto">Respectful &middot; Professional &middot; Ethical &middot; Service to All</div>
+        <div class="established">Established 1908</div>
+        <p class="lead">
+          Welcome to the official BCSO applications portal. Browse our
+          subdivisions below and submit an application directly &mdash;
+          no account or login required. Every application goes straight
+          to our command staff on Discord.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-gold" href="applications.html">View Subdivisions &amp; Apply</a>
+          <a class="btn btn-outline" href="https://discord.gg/" target="_blank" rel="noopener">Join our Discord</a>
+        </div>
+      </div>
+    </section>
+    <section>
+      <div class="container">
+        <h2 class="section-title">Our Values</h2>
+        <p class="section-sub">Every deputy of the Blaine County Sheriff's Office is held to the same standard, on and off duty.</p>
+        <div class="value-grid">
+          <div class="panel value-card">
+            <div class="icon">&#9878;</div>
+            <h3>Respectful</h3>
+            <p>Treating every citizen and colleague with dignity, regardless of the situation.</p>
+          </div>
+          <div class="panel value-card">
+            <div class="icon">&#127942;</div>
+            <h3>Professional</h3>
+            <p>Holding ourselves to a high standard of conduct, communication, and procedure.</p>
+          </div>
+          <div class="panel value-card">
+            <div class="icon">&#9878;&#65039;</div>
+            <h3>Ethical</h3>
+            <p>Doing what's right, even when no one is watching.</p>
+          </div>
+          <div class="panel value-card">
+            <div class="icon">&#128737;&#65039;</div>
+            <h3>Service to All</h3>
+            <p>Blaine County is our home, and every resident deserves our best.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="alt">
+      <div class="container">
+        <h2 class="section-title">Ready to Join a Subdivision?</h2>
+        <p class="section-sub">
+          Take a look at our specialised subdivisions — Traffic Enforcement, Organised
+          Crime, Natural Resources &amp; Environment, and Recruitment &amp; Training —
+          and apply in a couple of minutes.
+        </p>
+        <div class="cta-row">
+          <a class="btn btn-gold" href="applications.html">Browse Subdivisions</a>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/main.js"></script>
+</body>
+</html>

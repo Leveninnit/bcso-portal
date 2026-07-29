@@ -38,8 +38,8 @@
                 <input type="text" id="characterName" name="characterName" required placeholder="e.g. John Smith" />
               </div>
               <div class="form-row">
-                <label for="discordId">Discord ID *</label>
-                <input type="text" id="discordId" name="discordId" required placeholder="e.g. 372504974311632896" />
+                <label for="discordId">Discord Username *</label>
+                <input type="text" id="discordId" name="discordId" required placeholder="e.g. john_smith" />
                 <span class="hint" id="autofill-note" style="display:none;"></span>
               </div>
             </div>
@@ -62,6 +62,9 @@
               <label for="experience">Relevant experience *</label>
               <textarea id="experience" name="experience" required minlength="10" placeholder="Prior roleplay experience, relevant training, real-life relevant skills, etc."></textarea>
             </div>
+            <!-- Extra per-subdivision questions, configured on the Command
+                 Access dashboard, are rendered here by assets/apply.js. -->
+            <div id="custom-questions"></div>
             <input type="hidden" id="subdivisionSlug" name="subdivisionSlug" />
             <input type="hidden" id="subdivisionName" name="subdivisionName" />
             <input type="hidden" id="formLoadedAt" name="formLoadedAt" />

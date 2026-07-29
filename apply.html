@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Apply — BCSO</title>
+  <meta name="description" content="Submit your Blaine County Sheriff's Office subdivision application." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section>
+      <div class="container" style="max-width: 720px;">
+        <div class="breadcrumb"><a href="index.html">Home</a> / <a href="applications.html">Applications</a> / <span id="crumb-sub">Apply</span></div>
+        <h1 class="page-title" id="sub-title">Subdivision Application</h1>
+        <p class="page-sub" id="sub-description"></p>
+        <div class="panel" id="requirements-panel" style="margin-bottom:1.5rem; display:none;">
+          <strong style="color: var(--gold-bright); text-transform: uppercase; font-size: 0.85rem; letter-spacing: 0.04em;">Requirements</strong>
+          <ul class="requirements-list" id="requirements-list"></ul>
+        </div>
+        <div class="panel">
+          <form class="app-form" id="app-form" autocomplete="off">
+            <div class="alert alert-error" id="form-error"></div>
+            <div class="alert alert-success" id="form-success">
+              &#9989; Application submitted! Command staff has been notified on Discord. You can close this page.
+            </div>
+            <!-- honeypot: real users never see or fill this in -->
+            <div class="hp-field" aria-hidden="true">
+              <label for="website">Leave this field blank</label>
+              <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" />
+            </div>
+            <div class="two-col">
+              <div class="form-row">
+                <label for="characterName">In-Game / Character Name *</label>
+                <input type="text" id="characterName" name="characterName" required placeholder="e.g. John Smith" />
+              </div>
+              <div class="form-row">
+                <label for="discordId">Discord Username *</label>
+                <input type="text" id="discordId" name="discordId" required placeholder="e.g. john_smith" />
+              </div>
+            </div>
+            <div class="two-col">
+              <div class="form-row">
+                <label for="badgeNumber">Current Badge Number *</label>
+                <input type="text" id="badgeNumber" name="badgeNumber" required placeholder="e.g. 1042" />
+              </div>
+              <div class="form-row">
+                <label for="rank">Current Rank *</label>
+                <input type="text" id="rank" name="rank" required placeholder="e.g. Deputy Sheriff II" />
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="whyJoin">Why do you want to join this subdivision? *</label>
+              <textarea id="whyJoin" name="whyJoin" required minlength="20" placeholder="Tell us what draws you to this subdivision..."></textarea>
+              <span class="hint">Minimum 20 characters.</span>
+            </div>
+            <div class="form-row">
+              <label for="experience">Relevant experience *</label>
+              <textarea id="experience" name="experience" required minlength="10" placeholder="Prior roleplay experience, relevant training, real-life relevant skills, etc."></textarea>
+            </div>
+            <input type="hidden" id="subdivisionSlug" name="subdivisionSlug" />
+            <input type="hidden" id="subdivisionName" name="subdivisionName" />
+            <input type="hidden" id="formLoadedAt" name="formLoadedAt" />
+            <button type="submit" class="btn btn-gold" id="submit-btn">Submit Application</button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/subdivisions.js"></script>
+  <script src="assets/main.js"></script>
+  <script src="assets/apply.js"></script>
+</body>
+</html>

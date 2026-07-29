@@ -1,0 +1,120 @@
+(function () {
+  function getQueryParam(name) {
+    return new URLSearchParams(window.location.search).get(name);
+  }
+  function findSubdivision(slug) {
+    return (window.SUBDIVISIONS || []).find((s) => s.slug === slug);
+  }
+  function initPage() {
+    const slug = getQueryParam("div");
+    const sub = findSubdivision(slug);
+    const titleEl = document.getElementById("sub-title");
+    const descEl = document.getElementById("sub-description");
+    const crumbEl = document.getElementById("crumb-sub");
+    if (sub) {
+      titleEl.textContent = sub.name + " Activity Log";
+      descEl.textContent = "Log your shift activity for the " + sub.name + ".";
+      crumbEl.textContent = sub.name;
+      document.title = sub.name + " Activity Log — BCSO";
+      document.getElementById("subdivisionSlug").value = sub.slug;
+      document.getElementById("subdivisionName").value = sub.name;
+    } else {
+      titleEl.textContent = "General Activity Log";
+      descEl.textContent =
+        "No specific subdivision was selected, so this will be logged as a general activity entry.";
+      crumbEl.textContent = "General";
+      document.getElementById("subdivisionSlug").value = "general";
+      document.getElementById("subdivisionName").value = "General";
+    }
+    document.getElementById("formLoadedAt").value = Date.now().toString();
+  }
+  function showAlert(el, message) {
+    if (message) el.textContent = message;
+    el.classList.add("show");
+  }
+  function hideAlert(el) {
+    el.classList.remove("show");
+  }
+  // Auto-fill character name / badge / rank from the Master Roster when
+  // the Discord ID field loses focus. This is a convenience only — any
+  // failure (roster not configured, no match, network error) just
+  // leaves the fields as-is for manual entry.
+  async function handleDiscordIdBlur() {
+    const discordId = document.getElementById("discordId").value.trim();
+    const note = document.getElementById("autofill-note");
+    note.style.display = "none";
+    if (!discordId) return;
+    try {
+      const res = await fetch("/api/roster-lookup?discordId=" + encodeURIComponent(discordId));
+      const data = await res.json().catch(() => ({}));
+      if (data.found) {
+        if (data.name) document.getElementById("characterName").value = data.name;
+        if (data.badgeNumber) document.getElementById("badgeNumber").value = data.badgeNumber;
+        if (data.rank) document.getElementById("rank").value = data.rank;
+        note.textContent = "✓ Auto-filled from Master Roster";
+        note.style.color = "var(--success)";
+        note.style.display = "inline";
+      }
+    } catch {
+      // Roster lookup is a convenience — ignore failures quietly.
+    }
+  }
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const form = document.getElementById("log-form");
+    const submitBtn = document.getElementById("submit-btn");
+    const errorEl = document.getElementById("form-error");
+    const successEl = document.getElementById("form-success");
+    hideAlert(errorEl);
+    hideAlert(successEl);
+    // Honeypot: if this hidden field got filled in, silently treat as bot
+    // and pretend success, but never actually send it anywhere.
+    const honeypot = document.getElementById("website").value;
+    const payload = {
+      characterName: document.getElementById("characterName").value.trim(),
+      discordId: document.getElementById("discordId").value.trim(),
+      badgeNumber: document.getElementById("badgeNumber").value.trim(),
+      rank: document.getElementById("rank").value.trim(),
+      hoursOnDuty: document.getElementById("hoursOnDuty").value.trim(),
+      summary: document.getElementById("summary").value.trim(),
+      subdivisionSlug: document.getElementById("subdivisionSlug").value,
+      subdivisionName: document.getElementById("subdivisionName").value,
+      formLoadedAt: document.getElementById("formLoadedAt").value,
+      website: honeypot,
+    };
+    if (honeypot) {
+      // Pretend it worked so bots don't learn anything, but don't call the API.
+      form.reset();
+      showAlert(successEl);
+      return;
+    }
+    submitBtn.disabled = true;
+    const originalText = submitBtn.textContent;
+    submitBtn.innerHTML = '<span class="spinner"></span> Submitting…';
+    try {
+      const res = await fetch("/api/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.error || "Something went wrong submitting your activity log.");
+      }
+      form.reset();
+      showAlert(successEl);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      showAlert(errorEl, err.message || "Something went wrong. Please try again in a moment.");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } finally {
+      submitBtn.disabled = false;
+      submitBtn.textContent = originalText;
+    }
+  }
+  document.addEventListener("DOMContentLoaded", () => {
+    initPage();
+    document.getElementById("discordId").addEventListener("blur", handleDiscordIdBlur);
+    document.getElementById("log-form").addEventListener("submit", handleSubmit);
+  });
+})();

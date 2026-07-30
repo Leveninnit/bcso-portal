@@ -61,3 +61,21 @@ WHERE NOT EXISTS (SELECT 1 FROM movement_templates WHERE name = 'Suspending');
 INSERT INTO movement_templates (name, role_ids_json, sort_order)
 SELECT 'Investigating', '["1285706620374093854"]', 1
 WHERE NOT EXISTS (SELECT 1 FROM movement_templates WHERE name = 'Investigating');
+
+-- Per-subdivision overrides for the wording of the "original" fixed
+-- fields on the application/log forms (Character Name, Discord ID,
+-- Badge Number, Rank, and the form-specific content questions like
+-- "Why do you want to join?" or "Shift Summary"). Command staff can
+-- reword any of these per subdivision from the Command Access
+-- dashboard's "Original Fields" section. If no row exists for a given
+-- subdivision/form_type/field_key, the form falls back to its built-in
+-- default label — this table only stores the overrides, not every
+-- field for every subdivision.
+CREATE TABLE IF NOT EXISTS field_labels (
+  subdivision_slug TEXT NOT NULL,
+  form_type TEXT NOT NULL CHECK (form_type IN ('application', 'log')),
+  field_key TEXT NOT NULL,
+  label TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (subdivision_slug, form_type, field_key)
+);

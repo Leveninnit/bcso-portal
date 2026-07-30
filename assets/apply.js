@@ -50,6 +50,28 @@
       // skip them rather than blocking the whole form.
     }
   }
+  // Command staff can reword the fixed fields (Character Name, Discord
+  // ID, Badge Number, Rank, "Why do you want to join?", "Relevant
+  // experience") per subdivision from the Command Access dashboard's
+  // "Original Fields" section. This fetches any overrides and swaps in
+  // the custom wording — if nothing's overridden, or the request fails,
+  // the fields just keep the wording already in the HTML.
+  async function applyFieldLabelOverrides(slug) {
+    if (!slug || slug === "general") return;
+    try {
+      const res = await fetch(`/api/field-labels?div=${encodeURIComponent(slug)}&type=application`, {
+        cache: "no-store",
+      });
+      const data = await res.json().catch(() => ({}));
+      const labels = data.labels || {};
+      Object.keys(labels).forEach((fieldKey) => {
+        const label = document.querySelector(`label[for="${fieldKey}"]`);
+        if (label) label.textContent = `${labels[fieldKey]} *`;
+      });
+    } catch {
+      // Label overrides are a convenience — ignore failures quietly.
+    }
+  }
   function collectCustomAnswers() {
     const answers = {};
     document.querySelectorAll("#custom-questions [data-qid]").forEach((el) => {
@@ -87,7 +109,9 @@
       document.getElementById("subdivisionName").value = "General Application";
     }
     document.getElementById("formLoadedAt").value = Date.now().toString();
-    renderCustomQuestions(document.getElementById("subdivisionSlug").value);
+    const slugValue = document.getElementById("subdivisionSlug").value;
+    renderCustomQuestions(slugValue);
+    applyFieldLabelOverrides(slugValue);
   }
   function showAlert(el, message) {
     if (message) el.textContent = message;

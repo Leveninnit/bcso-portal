@@ -5,6 +5,43 @@
     dropdown: "Dropdown",
   };
   const MOVEMENT_TAB_SLUG = "__deputy_movement__";
+  // "Original fields" are the fixed fields built into every application/
+  // log form (as opposed to the custom questions command staff adds).
+  // These maps back the "Original Fields" editor in the Customize
+  // Questions panel — command staff can reword any of them per
+  // subdivision; the underlying field/validation never changes.
+  const DEFAULT_FIELD_LABELS = {
+    application: {
+      characterName: "In-Game / Character Name",
+      discordId: "Discord ID",
+      badgeNumber: "Current Badge Number",
+      rank: "Current Rank",
+      whyJoin: "Why do you want to join this subdivision?",
+      experience: "Relevant experience",
+    },
+    log: {
+      characterName: "In-Game / Character Name",
+      discordId: "Discord ID",
+      badgeNumber: "Current Badge Number",
+      rank: "Current Rank",
+      hoursOnDuty: "Hours on Duty",
+      summary: "Shift Summary",
+    },
+  };
+  const FIELD_KEY_ORDER = {
+    application: ["characterName", "discordId", "badgeNumber", "rank", "whyJoin", "experience"],
+    log: ["characterName", "discordId", "badgeNumber", "rank", "hoursOnDuty", "summary"],
+  };
+  const FIELD_KEY_DISPLAY = {
+    characterName: "Character Name field",
+    discordId: "Discord ID field",
+    badgeNumber: "Badge Number field",
+    rank: "Rank field",
+    whyJoin: '"Why join" question',
+    experience: '"Experience" question',
+    hoursOnDuty: '"Hours on Duty" question',
+    summary: '"Summary" question',
+  };
 
   let mySubdivisions = [];
   let activeSlug = null;
@@ -277,13 +314,79 @@
     const panel = el("ca-panel");
     panel.innerHTML = `
       <div class="panel">
+        <p class="ca-section-title">Original Fields</p>
+        <p class="ca-muted">These are the fixed fields built into every ${activeFormType === "application" ? "application" : "activity log"} form. Reword any of them for this subdivision — the underlying field, validation, and roster auto-fill all keep working exactly as before.</p>
+        <div id="ca-field-labels">Loading…</div>
+        <p class="ca-section-title">Custom Questions</p>
         <p class="ca-muted">These extra questions appear underneath the standard fields (Discord ID, Character Name, Badge, Rank) on this subdivision's ${activeFormType === "application" ? "application" : "activity log"} form.</p>
         <div id="ca-question-list">Loading…</div>
         <div class="ca-question-form" id="ca-add-question-form"></div>
       </div>
     `;
     renderQuestionForm(null);
-    await loadQuestions();
+    await Promise.all([loadFieldLabels(), loadQuestions()]);
+  }
+
+  async function loadFieldLabels() {
+    const box = el("ca-field-labels");
+    const slug = activeSlug;
+    const type = activeFormType;
+    try {
+      const res = await fetch(`/api/admin/field-labels?div=${encodeURIComponent(slug)}&type=${type}`, { cache: "no-store" });
+      const data = await res.json();
+      const overrides = data.labels || {};
+      box.innerHTML = FIELD_KEY_ORDER[type].map((fieldKey) => renderFieldLabelRow(fieldKey, overrides[fieldKey])).join("");
+      box.querySelectorAll("[data-flaction]").forEach((btn) => {
+        btn.addEventListener("click", () => handleFieldLabelAction(btn.dataset.flaction, btn.dataset.field));
+      });
+    } catch {
+      box.innerHTML = `<p class="ca-muted">Couldn't load original fields. Try refreshing.</p>`;
+    }
+  }
+
+  function renderFieldLabelRow(fieldKey, overrideValue) {
+    const current = overrideValue || DEFAULT_FIELD_LABELS[activeFormType][fieldKey];
+    const isOverridden = !!overrideValue;
+    return `
+      <div class="ca-question-row">
+        <div style="flex:1; min-width:220px;">
+          <div class="ca-question-meta">${FIELD_KEY_DISPLAY[fieldKey]}</div>
+          <input type="text" id="ca-fl-${fieldKey}" value="${escapeHtml(current)}" />
+        </div>
+        <div class="ca-actions">
+          <button class="ca-btn-accept" data-flaction="save" data-field="${fieldKey}">Save</button>
+          ${isOverridden ? `<button class="ca-btn-delete" data-flaction="reset" data-field="${fieldKey}">Reset to default</button>` : ""}
+        </div>
+      </div>
+    `;
+  }
+
+  async function handleFieldLabelAction(action, fieldKey) {
+    const slug = activeSlug;
+    const type = activeFormType;
+    if (action === "reset") {
+      if (!confirm(`Reset "${FIELD_KEY_DISPLAY[fieldKey]}" back to its default wording?`)) return;
+      await fetch(
+        `/api/admin/field-labels?div=${encodeURIComponent(slug)}&type=${type}&field=${encodeURIComponent(fieldKey)}`,
+        { method: "DELETE" }
+      );
+      loadFieldLabels();
+      return;
+    }
+    if (action === "save") {
+      const input = el(`ca-fl-${fieldKey}`);
+      const label = input.value.trim();
+      if (!label) {
+        alert("Please enter a label.");
+        return;
+      }
+      await fetch("/api/admin/field-labels", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subdivisionSlug: slug, formType: type, fieldKey, label }),
+      });
+      loadFieldLabels();
+    }
   }
 
   async function loadQuestions() {

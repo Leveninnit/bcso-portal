@@ -3,24 +3,22 @@
  * POST /api/log
  *
  * Receives a subdivision activity log entry from log.html, validates +
- * sanitizes it, forwards a formatted embed to Discord (pinging the
- * subdivision's command role and the submitter), and — if a D1
- * database is bound as "DB" — records it so Command Access can
- * list/accept/reject/delete it later. Uses a separate set of webhook
- * secrets from applications so activity logs and applications can be
- * routed to different Discord channels.
+ * sanitizes it, and forwards a formatted embed to Discord (unchanged
+ * behavior for every subdivision). New: for RTD specifically, also
+ * forwards the submission to a Google Apps Script Web App that appends
+ * a row to the Master Roster's 'RTD | Activation Logs' tab — the same
+ * tab the "BCSO | RTD | Activation Form" Google Form writes to — so
+ * portal submissions show up in the roster's hour/contribution totals
+ * exactly like a Form submission would.
  *
- * Optional per-subdivision routing: add a secret named
- * DISCORD_WEBHOOK_<SLUG>_LOG (e.g. DISCORD_WEBHOOK_TEU_LOG). Otherwise
- * falls back to the shared DISCORD_WEBHOOK_LOG.
- *
- * `answers` (optional): an object of { questionId: answerText } for any
- * extra custom questions Command staff configured for this
- * subdivision's log form. Missing/malformed answers never block
- * submission.
+ * New Cloudflare environment variables (Settings -> Environment
+ * variables, Encrypt both):
+ *   SHEET_LOG_WEBHOOK_URL   The Apps Script /exec URL (see Code.gs).
+ *   SHEET_LOG_SECRET        Must match the SHARED_SECRET script
+ *                           property set in that Apps Script project.
+ * If either is missing, the sheet-write step is silently skipped and
+ * everything else (Discord notifications) keeps working as before.
  */
-import { SUBDIVISION_COMMAND_ROLES } from "../_lib/discord.js";
-
 const FIELD_LIMITS = {
   characterName: 100,
   discordId: 100,
@@ -30,25 +28,98 @@ const FIELD_LIMITS = {
   subdivisionName: 80,
 };
 const MIN_FORM_FILL_MS = 3000; // real humans take at least a few seconds
+
 function clean(value, maxLen) {
   if (typeof value !== "string") return "";
   return value.trim().replace(/\s+/g, " ").slice(0, maxLen);
 }
-function cleanAnswers(answers) {
-  if (!answers || typeof answers !== "object") return {};
-  const out = {};
-  for (const [key, value] of Object.entries(answers)) {
-    if (!/^\d+$/.test(String(key))) continue;
-    out[key] = clean(String(value ?? ""), 500);
-  }
-  return out;
-}
+
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
 }
+
+// "2.5" hours -> "2:30:00", matching the H:MM:SS text the Google Form's
+// duration questions produce.
+function hoursToHms(hoursDecimal) {
+  const totalSeconds = Math.round(Number(hoursDecimal) * 3600);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function cleanRtd(rtd) {
+  const r = rtd && typeof rtd === "object" ? rtd : {};
+  const c = (v) => clean(v, 60);
+  const cadets = Array.isArray(r.cadets) ? r.cadets : [];
+  return {
+    role: c(r.role), // "assist" | "host" | "supervise"
+    assistType: c(r.assistType),
+    ftoBadge: c(r.ftoBadge),
+    ftoDiscordId: c(r.ftoDiscordId),
+    hostType: c(r.hostType),
+    cadets: [0, 1, 2, 3].map((i) => ({
+      badge: c(cadets[i] && cadets[i].badge),
+      discordId: c(cadets[i] && cadets[i].discordId),
+      result: c(cadets[i] && cadets[i].result),
+      notes: clean(cadets[i] && cadets[i].notes, 500),
+    })),
+    superviseType: c(r.superviseType),
+    supervisedBadge: c(r.supervisedBadge),
+    supervisedDiscordId: c(r.supervisedDiscordId),
+  };
+}
+
+// Best-effort forward to the Google Sheet via Apps Script. Never throws —
+// a failure here should not block the Discord notification from succeeding.
+async function forwardToSheet(env, { badgeNumber, discordId, rank, hoursOnDuty, rtd }) {
+  if (!env.SHEET_LOG_WEBHOOK_URL || !env.SHEET_LOG_SECRET) return;
+  try {
+    const hms = hoursToHms(hoursOnDuty);
+    const isAssist = rtd.role === "assist";
+    const isHost = rtd.role === "host";
+    const isSupervise = rtd.role === "supervise";
+
+    const payload = {
+      token: env.SHEET_LOG_SECRET,
+      badgeNumber,
+      discordId,
+      rank,
+      role: isAssist
+        ? "Assisting with a Training, Ride-along, or Recruitment"
+        : isHost
+        ? "Hosting a Training, Ride-along, or Recruitment"
+        : isSupervise
+        ? "Supervising a Training, Ride-along, or Recruitment"
+        : "",
+      assistType: isAssist ? rtd.assistType : "",
+      assistDuration: isAssist ? hms : "",
+      ftoBadge: isAssist ? rtd.ftoBadge : "",
+      ftoDiscordId: isAssist ? rtd.ftoDiscordId : "",
+      hostType: isHost ? rtd.hostType : "",
+      hostDuration: isHost ? hms : "",
+      cadets: isHost ? rtd.cadets : [],
+      superviseType: isSupervise ? rtd.superviseType : "",
+      supervisedBadge: isSupervise ? rtd.supervisedBadge : "",
+      supervisedDiscordId: isSupervise ? rtd.supervisedDiscordId : "",
+    };
+
+    const res = await fetch(env.SHEET_LOG_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.error("Sheet sync rejected the log:", res.status, await res.text().catch(() => ""));
+    }
+  } catch (err) {
+    console.error("Failed to forward log to Google Sheet:", err);
+  }
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
   let data;
@@ -57,6 +128,7 @@ export async function onRequestPost(context) {
   } catch {
     return jsonResponse({ error: "Invalid request body." }, 400);
   }
+
   // --- Anti-spam checks -----------------------------------------------
   if (data.website) {
     return jsonResponse({ ok: true }, 200);
@@ -65,6 +137,7 @@ export async function onRequestPost(context) {
   if (!loadedAt || Date.now() - loadedAt < MIN_FORM_FILL_MS) {
     return jsonResponse({ ok: true }, 200);
   }
+
   // --- Validation -------------------------------------------------------
   const required = [
     "characterName",
@@ -89,13 +162,36 @@ export async function onRequestPost(context) {
   const subdivisionName = clean(data.subdivisionName, FIELD_LIMITS.subdivisionName);
   const subdivisionSlug = clean(data.subdivisionSlug, 30).toLowerCase().replace(/[^a-z0-9_-]/g, "");
   const hoursOnDuty = Number(data.hoursOnDuty);
-  const answers = cleanAnswers(data.answers);
   if (!Number.isFinite(hoursOnDuty) || hoursOnDuty <= 0 || hoursOnDuty > 24) {
     return jsonResponse({ error: "Hours on duty must be a number between 0 and 24." }, 400);
   }
   if (summary.length < 10) {
     return jsonResponse({ error: "Please write at least 10 characters describing your shift." }, 400);
   }
+
+  let rtd = null;
+  if (subdivisionSlug === "rtd") {
+    rtd = cleanRtd(data.rtd);
+    if (!["assist", "host", "supervise"].includes(rtd.role)) {
+      return jsonResponse({ error: "Please select your role during this activation." }, 400);
+    }
+    if (rtd.role === "assist" && (!rtd.assistType || !rtd.ftoBadge || !rtd.ftoDiscordId)) {
+      return jsonResponse({ error: "Please fill in all Assist fields (activity type, FTO badge, FTO Discord ID)." }, 400);
+    }
+    if (rtd.role === "host") {
+      if (!rtd.hostType) {
+        return jsonResponse({ error: "Please select what you hosted." }, 400);
+      }
+      const c1 = rtd.cadets[0];
+      if (!c1.badge || !c1.discordId || !c1.result) {
+        return jsonResponse({ error: "Cadet #1's badge number, Discord ID, and Pass/Fail are required." }, 400);
+      }
+    }
+    if (rtd.role === "supervise" && (!rtd.superviseType || !rtd.supervisedBadge || !rtd.supervisedDiscordId)) {
+      return jsonResponse({ error: "Please fill in all Supervise fields." }, 400);
+    }
+  }
+
   // --- Resolve which webhook to send to ---------------------------------
   const perSubKey = `DISCORD_WEBHOOK_${subdivisionSlug.toUpperCase()}_LOG`;
   const webhookUrl = env[perSubKey] || env.DISCORD_WEBHOOK_LOG;
@@ -106,21 +202,49 @@ export async function onRequestPost(context) {
       500
     );
   }
+
   // --- Build the embed ---------------------------------------------------
   const origin = new URL(request.url).origin;
   const crestUrl = `${origin}/assets/bcso-crest.png`;
   const fields = [
     { name: "Character Name", value: characterName, inline: true },
-    { name: "Discord ID", value: discordId, inline: true },
+    { name: "Discord Username", value: discordId, inline: true },
     { name: "Badge Number", value: badgeNumber, inline: true },
     { name: "Rank", value: rank, inline: true },
     { name: "Subdivision", value: subdivisionName, inline: true },
     { name: "Hours on Duty", value: String(hoursOnDuty), inline: true },
-    { name: "Shift Summary", value: summary, inline: false },
   ];
-  for (const [, value] of Object.entries(answers)) {
-    if (value) fields.push({ name: "Additional Question", value, inline: false });
+  if (rtd) {
+    if (rtd.role === "assist") {
+      fields.push(
+        { name: "Role", value: "Assist", inline: true },
+        { name: "Assisted With", value: rtd.assistType, inline: true },
+        { name: "FTO", value: `${rtd.ftoBadge} (${rtd.ftoDiscordId})`, inline: true }
+      );
+    } else if (rtd.role === "host") {
+      fields.push(
+        { name: "Role", value: "Host", inline: true },
+        { name: "Hosted", value: rtd.hostType, inline: true }
+      );
+      rtd.cadets
+        .filter((c) => c.badge || c.discordId)
+        .forEach((c, i) => {
+          fields.push({
+            name: `Cadet #${i + 1}`,
+            value: `${c.badge} (${c.discordId}) — ${c.result}${c.notes ? " — " + c.notes : ""}`,
+            inline: false,
+          });
+        });
+    } else if (rtd.role === "supervise") {
+      fields.push(
+        { name: "Role", value: "Supervise", inline: true },
+        { name: "Supervised", value: rtd.superviseType, inline: true },
+        { name: "Supervised Person", value: `${rtd.supervisedBadge} (${rtd.supervisedDiscordId})`, inline: true }
+      );
+    }
   }
+  fields.push({ name: "Shift Summary", value: summary, inline: false });
+
   const embed = {
     title: `Activity Log — ${subdivisionName}`,
     color: 0x2c5c3a, // BCSO green — visually distinct from gold application embeds
@@ -129,27 +253,13 @@ export async function onRequestPost(context) {
     footer: { text: "Blaine County Sheriff's Office • Activity Logs" },
     timestamp: new Date().toISOString(),
   };
-  // Ping the subdivision's command role (if configured) and the person
-  // who submitted the log. Only these two explicitly-allowed IDs can
-  // ever ping — nothing typed into the summary field can trigger
-  // @everyone or any other mention.
-  const commandRoleId = SUBDIVISION_COMMAND_ROLES[subdivisionSlug];
-  const mentionParts = [];
-  const allowedMentions = { parse: [], roles: [], users: [] };
-  if (commandRoleId) {
-    mentionParts.push(`<@&${commandRoleId}>`);
-    allowedMentions.roles.push(commandRoleId);
-  }
-  if (/^\d{15,25}$/.test(discordId)) {
-    mentionParts.push(`<@${discordId}>`);
-    allowedMentions.users.push(discordId);
-  }
   const discordPayload = {
     username: "BCSO Activity Logs",
     avatar_url: crestUrl,
-    content: mentionParts.length ? mentionParts.join(" ") : undefined,
     embeds: [embed],
-    allowed_mentions: allowedMentions,
+    // Belt-and-braces: even if someone smuggles "@everyone" into a text
+    // field, Discord will render it as plain text, never as a real ping.
+    allowed_mentions: { parse: [] },
   };
   try {
     const discordRes = await fetch(webhookUrl, {
@@ -166,29 +276,15 @@ export async function onRequestPost(context) {
     console.error("Failed to reach Discord webhook:", err);
     return jsonResponse({ error: "Could not reach Discord right now. Please try again in a moment." }, 502);
   }
-  // --- Record it for Command Access (best-effort; never blocks the submitter) ---
-  if (env.DB) {
-    try {
-      await env.DB.prepare(
-        `INSERT INTO submissions (subdivision_slug, form_type, discord_id, character_name, badge_number, rank, core_fields_json, answers_json)
-         VALUES (?, 'log', ?, ?, ?, ?, ?, ?)`
-      )
-        .bind(
-          subdivisionSlug,
-          discordId,
-          characterName,
-          badgeNumber,
-          rank,
-          JSON.stringify({ hoursOnDuty, summary }),
-          JSON.stringify(answers)
-        )
-        .run();
-    } catch (err) {
-      console.error("Failed to record log in D1 (non-fatal):", err);
-    }
+
+  // --- RTD only: mirror this submission into the Master Roster sheet ----
+  if (rtd) {
+    await forwardToSheet(env, { badgeNumber, discordId, rank, hoursOnDuty, rtd });
   }
+
   return jsonResponse({ ok: true }, 200);
 }
+
 // Any method other than POST gets a clean 405 instead of falling through
 // to Cloudflare's default static-asset handling.
 export async function onRequestGet() {

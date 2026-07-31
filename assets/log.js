@@ -117,8 +117,8 @@
       // #2-4 stay optional even inside the Host branch (they mirror
       // the Form's "(If Present)" questions).
       el.querySelectorAll("input, select").forEach((field) => {
-        const isCadet2to4 = /^cadet[234]/.test(field.id);
-        field.required = active && !isCadet2to4;
+        const isOptionalField = /^cadet[234]/.test(field.id) || /Notes$/.test(field.id);
+        field.required = active && !isOptionalField;
       });
     });
   }

@@ -298,3 +298,4 @@
     document.getElementById("log-form").addEventListener("submit", handleSubmit);
   });
 })();
+

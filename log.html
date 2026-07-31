@@ -53,10 +53,12 @@
                 <label for="rank">Current Rank *</label>
                 <input type="text" id="rank" name="rank" required placeholder="e.g. Deputy Sheriff II" />
               </div>
-              <div class="form-row">
-                <label for="hoursOnDuty">Hours on Duty *</label>
-                <input type="number" id="hoursOnDuty" name="hoursOnDuty" required min="0.25" max="24" step="0.25" placeholder="e.g. 2.5" />
-              </div>
+            </div>
+
+            <!-- Hours on Duty applies to every subdivision, including RTD - it must never live inside a container that can be hidden. -->
+            <div class="form-row">
+              <label for="hoursOnDuty">Hours on Duty *</label>
+              <input type="number" id="hoursOnDuty" name="hoursOnDuty" required min="0.25" max="24" step="0.25" placeholder="e.g. 2.5" />
             </div>
 
             <!-- RTD-only fields. Mirrors the "BCSO | RTD | Activation Form"

@@ -14,6 +14,7 @@
       "'": "&#39;",
     }[c]));
   }
+
   // Extra per-subdivision questions configured by command staff on the
   // Command Access dashboard — rendered beneath the fixed fields above.
   // See assets/command-access.js for the customizer that manages these.
@@ -50,6 +51,7 @@
       // skip them rather than blocking the whole form.
     }
   }
+
   // Command staff can reword the fixed fields (Character Name, Discord
   // ID, Badge Number, Rank, "Hours on Duty", "Shift Summary") per
   // subdivision from the Command Access dashboard's "Original Fields"
@@ -72,6 +74,7 @@
       // Label overrides are a convenience — ignore failures quietly.
     }
   }
+
   function collectCustomAnswers() {
     const answers = {};
     document.querySelectorAll("#custom-questions [data-qid]").forEach((el) => {
@@ -80,6 +83,68 @@
     });
     return answers;
   }
+
+  // ------------------------------------------------------------------
+  // RTD-only branching fields (mirrors the "BCSO | RTD | Activation
+  // Form" Google Form: Role -> Assist / Host / Supervise sections).
+  // ------------------------------------------------------------------
+  function isRtdSlug(slug) {
+    return slug === "rtd";
+  }
+
+  function setRtdMode(isRtd) {
+    document.getElementById("rtd-fields").style.display = isRtd ? "" : "none";
+    document.getElementById("generic-rank-row").style.display = isRtd ? "none" : "";
+    const genericRank = document.getElementById("rank");
+    const rtdRank = document.getElementById("rtdRank");
+    const rtdRole = document.getElementById("rtdRole");
+    genericRank.required = !isRtd;
+    rtdRank.required = isRtd;
+    rtdRole.required = isRtd;
+    if (isRtd) {
+      updateRtdBranch();
+    }
+  }
+
+  function updateRtdBranch() {
+    const role = document.getElementById("rtdRole").value; // "assist" | "host" | "supervise" | ""
+    const panels = { assist: "rtd-assist", host: "rtd-host", supervise: "rtd-supervise" };
+    Object.entries(panels).forEach(([key, id]) => {
+      const el = document.getElementById(id);
+      const active = role === key;
+      el.style.display = active ? "" : "none";
+      // Only require fields inside the currently-active branch. Cadet
+      // #2-4 stay optional even inside the Host branch (they mirror
+      // the Form's "(If Present)" questions).
+      el.querySelectorAll("input, select").forEach((field) => {
+        const isCadet2to4 = /^cadet[234]/.test(field.id);
+        field.required = active && !isCadet2to4;
+      });
+    });
+  }
+
+  function collectRtdFields() {
+    const val = (id) => (document.getElementById(id).value || "").trim();
+    const role = val("rtdRole");
+    const cadet = (n) => ({
+      badge: val(`cadet${n}Badge`),
+      discordId: val(`cadet${n}Discord`),
+      result: val(`cadet${n}Result`),
+      notes: val(`cadet${n}Notes`),
+    });
+    return {
+      role,
+      assistType: role === "assist" ? val("assistType") : "",
+      ftoBadge: role === "assist" ? val("ftoBadge") : "",
+      ftoDiscordId: role === "assist" ? val("ftoDiscordId") : "",
+      hostType: role === "host" ? val("hostType") : "",
+      cadets: role === "host" ? [1, 2, 3, 4].map(cadet) : [],
+      superviseType: role === "supervise" ? val("superviseType") : "",
+      supervisedBadge: role === "supervise" ? val("supervisedBadge") : "",
+      supervisedDiscordId: role === "supervise" ? val("supervisedDiscordId") : "",
+    };
+  }
+
   function initPage() {
     const slug = getQueryParam("div");
     const sub = findSubdivision(slug);
@@ -105,7 +170,11 @@
     const slugValue = document.getElementById("subdivisionSlug").value;
     renderCustomQuestions(slugValue);
     applyFieldLabelOverrides(slugValue);
+
+    setRtdMode(isRtdSlug(slugValue));
+    document.getElementById("rtdRole").addEventListener("change", updateRtdBranch);
   }
+
   function showAlert(el, message) {
     if (message) el.textContent = message;
     el.classList.add("show");
@@ -113,6 +182,7 @@
   function hideAlert(el) {
     el.classList.remove("show");
   }
+
   // Auto-fill character name / badge / rank from the Master Roster when
   // the Discord ID field loses focus. This is a convenience only — any
   // failure (roster not configured, no match, network error) just
@@ -128,7 +198,18 @@
       if (data.found) {
         if (data.name) document.getElementById("characterName").value = data.name;
         if (data.badgeNumber) document.getElementById("badgeNumber").value = data.badgeNumber;
-        if (data.rank) document.getElementById("rank").value = data.rank;
+        if (data.rank) {
+          const slug = document.getElementById("subdivisionSlug").value;
+          if (isRtdSlug(slug)) {
+            const rtdRank = document.getElementById("rtdRank");
+            const match = Array.from(rtdRank.options).find(
+              (o) => o.value.toLowerCase() === data.rank.toLowerCase()
+            );
+            if (match) rtdRank.value = match.value;
+          } else {
+            document.getElementById("rank").value = data.rank;
+          }
+        }
         note.textContent = "✓ Auto-filled from Master Roster";
         note.style.color = "var(--success)";
         note.style.display = "inline";
@@ -137,6 +218,7 @@
       // Roster lookup is a convenience — ignore failures quietly.
     }
   }
+
   async function handleSubmit(e) {
     e.preventDefault();
     const form = document.getElementById("log-form");
@@ -145,28 +227,44 @@
     const successEl = document.getElementById("form-success");
     hideAlert(errorEl);
     hideAlert(successEl);
+
     // Honeypot: if this hidden field got filled in, silently treat as bot
     // and pretend success, but never actually send it anywhere.
     const honeypot = document.getElementById("website").value;
+
+    const slug = document.getElementById("subdivisionSlug").value;
+    const rtd = isRtdSlug(slug);
+    const rank = rtd ? document.getElementById("rtdRank").value.trim() : document.getElementById("rank").value.trim();
+
     const payload = {
       characterName: document.getElementById("characterName").value.trim(),
       discordId: document.getElementById("discordId").value.trim(),
       badgeNumber: document.getElementById("badgeNumber").value.trim(),
-      rank: document.getElementById("rank").value.trim(),
+      rank,
       hoursOnDuty: document.getElementById("hoursOnDuty").value.trim(),
       summary: document.getElementById("summary").value.trim(),
-      subdivisionSlug: document.getElementById("subdivisionSlug").value,
+      subdivisionSlug: slug,
       subdivisionName: document.getElementById("subdivisionName").value,
       formLoadedAt: document.getElementById("formLoadedAt").value,
       website: honeypot,
       answers: collectCustomAnswers(),
     };
+    if (rtd) {
+      payload.rtd = collectRtdFields();
+    }
+
     if (honeypot) {
       // Pretend it worked so bots don't learn anything, but don't call the API.
       form.reset();
       showAlert(successEl);
       return;
     }
+
+    if (rtd && !payload.rtd.role) {
+      showAlert(errorEl, "Please select your role during this activation.");
+      return;
+    }
+
     submitBtn.disabled = true;
     const originalText = submitBtn.textContent;
     submitBtn.innerHTML = '<span class="spinner"></span> Submitting…';
@@ -178,19 +276,22 @@
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) {
-        throw new Error(data.error || "Something went wrong submitting your activity log.");
+        showAlert(errorEl, data.error || "Something went wrong. Please try again.");
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+        return;
       }
       form.reset();
+      setRtdMode(rtd);
       showAlert(successEl);
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } catch (err) {
-      showAlert(errorEl, err.message || "Something went wrong. Please try again in a moment.");
-      window.scrollTo({ top: 0, behavior: "smooth" });
-    } finally {
+      submitBtn.textContent = originalText;
+    } catch {
+      showAlert(errorEl, "Could not reach the server. Please check your connection and try again.");
       submitBtn.disabled = false;
       submitBtn.textContent = originalText;
     }
   }
+
   document.addEventListener("DOMContentLoaded", () => {
     initPage();
     document.getElementById("discordId").addEventListener("blur", handleDiscordIdBlur);

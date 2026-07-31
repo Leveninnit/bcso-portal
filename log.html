@@ -43,7 +43,12 @@
                 <input type="text" id="badgeNumber" name="badgeNumber" required placeholder="e.g. 1042" />
               </div>
             </div>
-            <div class="two-col">
+
+            <!-- Generic rank field: used by every subdivision EXCEPT RTD.
+                 For RTD this is hidden and replaced by #rtd-rank below,
+                 which matches the exact 4 options the RTD Google Form uses
+                 so rank-based roster formulas keep matching. -->
+            <div class="two-col" id="generic-rank-row">
               <div class="form-row">
                 <label for="rank">Current Rank *</label>
                 <input type="text" id="rank" name="rank" required placeholder="e.g. Deputy Sheriff II" />
@@ -53,13 +58,205 @@
                 <input type="number" id="hoursOnDuty" name="hoursOnDuty" required min="0.25" max="24" step="0.25" placeholder="e.g. 2.5" />
               </div>
             </div>
+
+            <!-- RTD-only fields. Mirrors the "BCSO | RTD | Activation Form"
+                 Google Form question-for-question (same wording, same
+                 dropdown options) so the Master Roster's hour/contribution
+                 formulas — which read the Google Form's response sheet —
+                 keep working unchanged. Hidden/inert for every other
+                 subdivision. Hours on Duty above is reused as the single
+                 duration value instead of asking for it a second time. -->
+            <div id="rtd-fields" style="display:none;">
+              <div class="two-col">
+                <div class="form-row">
+                  <label for="rtdRank">What is your current Rank in RTD? *</label>
+                  <select id="rtdRank" name="rtdRank">
+                    <option value="">Select…</option>
+                    <option value="RTD Assistant Field Trainer">RTD Assistant Field Trainer</option>
+                    <option value="RTD Field Trainer">RTD Field Trainer</option>
+                    <option value="RTD Operation lead">RTD Operation lead</option>
+                    <option value="RTD  Board of  Directors +">RTD Board of Directors +</option>
+                  </select>
+                </div>
+                <div class="form-row">
+                  <label for="rtdRole">What was your role during this activation? *</label>
+                  <select id="rtdRole" name="rtdRole">
+                    <option value="">Choose</option>
+                    <option value="assist">Assisting with a Training, Ride-along, or Recruitment</option>
+                    <option value="host">Hosting a Training, Ride-along, or Recruitment</option>
+                    <option value="supervise">Supervising a Training, Ride-along, or Recruitment</option>
+                  </select>
+                </div>
+              </div>
+
+              <div id="rtd-assist" style="display:none;">
+                <div class="form-row">
+                  <label for="assistType">What did you assist with? *</label>
+                  <select id="assistType" name="assistType">
+                    <option value="">Select…</option>
+                    <option value="Full BCSO Training">Full BCSO Training</option>
+                    <option value="Open Recruitment">Open Recruitment</option>
+                  </select>
+                </div>
+                <div class="two-col">
+                  <div class="form-row">
+                    <label for="ftoBadge">What is your FTO's Badge Number? (Ex. 03221) *</label>
+                    <input type="text" id="ftoBadge" name="ftoBadge" placeholder="e.g. 03221" />
+                  </div>
+                  <div class="form-row">
+                    <label for="ftoDiscordId">What is your FTO's Discord Id? (Ex. 1002934806990041188) *</label>
+                    <input type="text" id="ftoDiscordId" name="ftoDiscordId" placeholder="e.g. 1002934806990041188" />
+                  </div>
+                </div>
+              </div>
+
+              <div id="rtd-host" style="display:none;">
+                <div class="form-row">
+                  <label for="hostType">What did you host? *</label>
+                  <select id="hostType" name="hostType">
+                    <option value="">Select…</option>
+                    <option value="Full BCSO Training">Full BCSO Training</option>
+                    <option value="Attempted Training">Attempted Training</option>
+                    <option value="Ride-along">Ride-along</option>
+                    <option value="Open Recruitment">Open Recruitment</option>
+                  </select>
+                </div>
+                <p class="hint">Cadet #1 is required. Cadets #2–#4 are optional — leave them blank if not present.</p>
+                <div id="cadet-1">
+                  <div class="two-col">
+                    <div class="form-row">
+                      <label for="cadet1Badge">What was the Badge Number of Cadet #1 *</label>
+                      <input type="text" id="cadet1Badge" name="cadet1Badge" />
+                    </div>
+                    <div class="form-row">
+                      <label for="cadet1Discord">What was the Discord ID of Cadet #1 *</label>
+                      <input type="text" id="cadet1Discord" name="cadet1Discord" />
+                    </div>
+                  </div>
+                  <div class="two-col">
+                    <div class="form-row">
+                      <label for="cadet1Result">Cadet #1 Pass or Fail *</label>
+                      <select id="cadet1Result" name="cadet1Result">
+                        <option value="">Select…</option>
+                        <option value="Pass">Pass</option>
+                        <option value="Fail">Fail</option>
+                      </select>
+                    </div>
+                    <div class="form-row">
+                      <label for="cadet1Notes">Cadet #1 Notes</label>
+                      <input type="text" id="cadet1Notes" name="cadet1Notes" />
+                    </div>
+                  </div>
+                </div>
+                <!-- Cadets 2-4: identical shape, all optional ("If Present") -->
+                <div id="cadet-2">
+                  <div class="two-col">
+                    <div class="form-row">
+                      <label for="cadet2Badge">Badge Number of Cadet #2 (If Present)</label>
+                      <input type="text" id="cadet2Badge" name="cadet2Badge" />
+                    </div>
+                    <div class="form-row">
+                      <label for="cadet2Discord">Discord ID of Cadet #2 (If Present)</label>
+                      <input type="text" id="cadet2Discord" name="cadet2Discord" />
+                    </div>
+                  </div>
+                  <div class="two-col">
+                    <div class="form-row">
+                      <label for="cadet2Result">Cadet #2 Pass or Fail (If Present)</label>
+                      <select id="cadet2Result" name="cadet2Result">
+                        <option value="">Select…</option>
+                        <option value="Pass">Pass</option>
+                        <option value="Fail">Fail</option>
+                      </select>
+                    </div>
+                    <div class="form-row">
+                      <label for="cadet2Notes">Cadet #2 Notes (If Present)</label>
+                      <input type="text" id="cadet2Notes" name="cadet2Notes" />
+                    </div>
+                  </div>
+                </div>
+                <div id="cadet-3">
+                  <div class="two-col">
+                    <div class="form-row">
+                      <label for="cadet3Badge">Badge Number of Cadet #3 (If Present)</label>
+                      <input type="text" id="cadet3Badge" name="cadet3Badge" />
+                    </div>
+                    <div class="form-row">
+                      <label for="cadet3Discord">Discord ID of Cadet #3 (If Present)</label>
+                      <input type="text" id="cadet3Discord" name="cadet3Discord" />
+                    </div>
+                  </div>
+                  <div class="two-col">
+                    <div class="form-row">
+                      <label for="cadet3Result">Cadet #3 Pass or Fail (If Present)</label>
+                      <select id="cadet3Result" name="cadet3Result">
+                        <option value="">Select…</option>
+                        <option value="Pass">Pass</option>
+                        <option value="Fail">Fail</option>
+                      </select>
+                    </div>
+                    <div class="form-row">
+                      <label for="cadet3Notes">Cadet #3 Notes (If Present)</label>
+                      <input type="text" id="cadet3Notes" name="cadet3Notes" />
+                    </div>
+                  </div>
+                </div>
+                <div id="cadet-4">
+                  <div class="two-col">
+                    <div class="form-row">
+                      <label for="cadet4Badge">Badge Number of Cadet #4 (If Present)</label>
+                      <input type="text" id="cadet4Badge" name="cadet4Badge" />
+                    </div>
+                    <div class="form-row">
+                      <label for="cadet4Discord">Discord ID of Cadet #4 (If Present)</label>
+                      <input type="text" id="cadet4Discord" name="cadet4Discord" />
+                    </div>
+                  </div>
+                  <div class="two-col">
+                    <div class="form-row">
+                      <label for="cadet4Result">Cadet #4 Pass or Fail (If Present)</label>
+                      <select id="cadet4Result" name="cadet4Result">
+                        <option value="">Select…</option>
+                        <option value="Pass">Pass</option>
+                        <option value="Fail">Fail</option>
+                      </select>
+                    </div>
+                    <div class="form-row">
+                      <label for="cadet4Notes">Cadet #4 Notes (If Present)</label>
+                      <input type="text" id="cadet4Notes" name="cadet4Notes" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="rtd-supervise" style="display:none;">
+                <div class="form-row">
+                  <label for="superviseType">What did you supervise? *</label>
+                  <select id="superviseType" name="superviseType">
+                    <option value="">Select…</option>
+                    <option value="Full BCSO Training">Full BCSO Training</option>
+                    <option value="Ride-along">Ride-along</option>
+                    <option value="Open Recruitment">Open Recruitment</option>
+                  </select>
+                </div>
+                <div class="two-col">
+                  <div class="form-row">
+                    <label for="supervisedBadge">What is the Badge Number of the person you supervised? *</label>
+                    <input type="text" id="supervisedBadge" name="supervisedBadge" />
+                  </div>
+                  <div class="form-row">
+                    <label for="supervisedDiscordId">What is the Discord ID of the person you supervised? *</label>
+                    <input type="text" id="supervisedDiscordId" name="supervisedDiscordId" />
+                  </div>
+                </div>
+              </div>
+            </div>
+
             <div class="form-row">
               <label for="summary">Shift Summary *</label>
               <textarea id="summary" name="summary" required minlength="10" placeholder="What did you do this shift? Patrols, arrests, notable incidents, etc."></textarea>
               <span class="hint">Minimum 10 characters.</span>
             </div>
-            <!-- Extra per-subdivision questions, configured on the Command
-                 Access dashboard, are rendered here by assets/log.js. -->
             <div id="custom-questions"></div>
             <input type="hidden" id="subdivisionSlug" name="subdivisionSlug" />
             <input type="hidden" id="subdivisionName" name="subdivisionName" />

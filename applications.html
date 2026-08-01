@@ -35,19 +35,14 @@
 const grid = document.getElementById("sub-grid");
 // Every subdivision gets a card, including SRT — it has no public
 // application form (see assets/subdivisions.js), so its card skips
-// the Apply button, but it still gets a Dispatch section for quick
-// access to its own Activity Log and Leaderboard.
+// the Apply button. Each card links to its own Leaderboard view.
 grid.innerHTML = SUBDIVISIONS.map((s) => `
 <div class="panel sub-card">
 <span class="badge-tag">${s.short}</span>
 <h3>${s.name}</h3>
 <p>${s.description}</p>
 ${s.logOnly ? "" : `<a class="btn btn-gold" href="apply.html?div=${encodeURIComponent(s.slug)}">Apply Now</a>`}
-<div class="sub-dispatch">
-<span class="sub-dispatch-label">Dispatch</span>
-<a class="quick-link" href="activity-log.html?div=${encodeURIComponent(s.slug)}"><span class="quick-link-icon">🪪</span>Log Activity</a>
-<a class="quick-link" href="leaderboards.html?div=${encodeURIComponent(s.slug)}"><span class="quick-link-icon">🏆</span>Leaderboard</a>
-</div>
+<a class="quick-link sub-card-link" href="leaderboards.html?div=${encodeURIComponent(s.slug)}"><span class="quick-link-icon">🏆</span>Leaderboard</a>
 </div>
 `).join("");
 }

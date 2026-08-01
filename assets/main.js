@@ -5,11 +5,11 @@
  */
 const NAV_LINKS = [
   { href: "index.html", label: "Home" },
+  { href: "team.html", label: "Meet the Team" },
   { href: "applications.html", label: "Applications" },
   { href: "activity-log.html", label: "Activity Log" },
   { href: "documents.html", label: "Documents" },
   { href: "leaderboards.html", label: "Leaderboards" },
-  { href: "dispatch.html", label: "Dispatch" },
   { href: "command-access.html", label: "Command Access" },
 ];
 function currentPage() {

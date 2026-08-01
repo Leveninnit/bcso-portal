@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Meet the Team — Admin</title>
+  <meta name="description" content="Edit the Meet the Team High Command roster (High Command access only)." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+  <link rel="stylesheet" href="assets/team-admin.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section>
+      <div class="container">
+        <div class="breadcrumb">
+          <a href="index.html">Home</a> / <a href="command-access.html">Command Access</a> / Meet the Team
+        </div>
+        <h1 class="page-title">Meet the Team — Admin</h1>
+        <p class="page-sub">
+          Edit the 5 High Command roster slots shown on the public Meet the Team page.
+          Only visible to accounts with High Command access.
+        </p>
+        <div id="team-admin-status" class="page-sub"></div>
+        <div id="team-admin-denied" class="panel" style="display:none;">
+          <p>You don't have High Command access. If you believe this is a mistake, contact a system administrator.</p>
+        </div>
+        <div id="team-admin-grid" class="team-admin-grid"></div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/subdivisions.js"></script>
+  <script src="assets/main.js"></script>
+  <script src="assets/team-admin.js"></script>
+</body>
+</html>

@@ -191,6 +191,24 @@
      line-height: 1.5;
 }
 
+/* "Show:" status filter dropdown in Pending Review is not inside a
+   .form-row, so it misses style.css dark form styling and falls
+   back to the browser default (white background). */
+#ca-status-filter {
+  background: #0c1c13;
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.5rem 0.8rem;
+  font-size: 0.95rem;
+  font-family: inherit;
+}
+#ca-status-filter:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
+}
+
 /* Focus states — inputs/selects inherit style.css's base look, this
    just makes keyboard/mouse focus clearly visible on this page too. */
 #ca-dashboard input[type="text"]:focus,

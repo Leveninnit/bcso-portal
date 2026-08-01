@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: "activity-log.html", label: "Activity Log" },
   { href: "documents.html", label: "Documents" },
   { href: "leaderboards.html", label: "Leaderboards" },
+  { href: "dispatch.html", label: "Dispatch" },
   { href: "command-access.html", label: "Command Access" },
 ];
 function currentPage() {

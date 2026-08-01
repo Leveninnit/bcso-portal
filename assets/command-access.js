@@ -50,6 +50,7 @@
   let questionLabelCache = {}; // `${slug}:${type}` -> { [questionId]: label }
   let movementInnerTab = "generate"; // "generate" | "customize"
   let movementTemplatesCache = null;
+let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed once
 
   function el(id) {
     return document.getElementById(id);
@@ -71,6 +72,14 @@
   async function init() {
     const params = new URLSearchParams(window.location.search);
     const error = params.get("error");
+  const deepLinkParams = ["div", "type", "id"]
+    .map((k) => (params.get(k) ? `${k}=${encodeURIComponent(params.get(k))}` : null))
+    .filter(Boolean)
+    .join("&");
+  const loginLink = el("ca-login-link");
+  if (loginLink && deepLinkParams) {
+    loginLink.href = `/api/auth/login?returnTo=${encodeURIComponent(deepLinkParams)}`;
+  }
     if (error) {
       const messages = {
         no_access: "You're logged into Discord, but you don't hold the Command Login role, so you can't access this dashboard.",
@@ -110,7 +119,17 @@
     // use it), so the tabs — and a default tab to land on — always
     // render even if this person has no subdivision command role.
     renderSubTabs();
+    const wantDiv = params.get("div");
+  const wantType = params.get("type");
+  const wantId = params.get("id");
+  if (wantDiv && mySubdivisions.includes(wantDiv) && wantId) {
+    activeSlug = wantDiv;
+    activeFormType = wantType === "log" ? "log" : "application";
+    activeInnerTab = "review";
+    pendingHighlight = String(wantId);
+  } else {
     activeSlug = mySubdivisions.length ? mySubdivisions[0] : MOVEMENT_TAB_SLUG;
+  }
     renderSubContent();
   }
 
@@ -197,6 +216,7 @@
   // ---------------------------------------------------------------------
   async function renderReviewPanel() {
     const panel = el("ca-panel");
+  const defaultStatus = pendingHighlight ? "" : "pending";
     panel.innerHTML = `
       <div class="panel">
         <label for="ca-status-filter">Show:</label>
@@ -210,8 +230,9 @@
       </div>
     `;
     const select = el("ca-status-filter");
+  select.value = defaultStatus;
     select.addEventListener("change", () => loadSubmissions(select.value));
-    await loadSubmissions("pending");
+    await loadSubmissions(defaultStatus);
   }
 
   async function loadQuestionLabels(slug, type) {
@@ -235,6 +256,7 @@
     list.innerHTML = "Loading…";
     const slug = activeSlug;
     const type = activeFormType;
+  const highlightId = pendingHighlight;
     try {
       const url = `/api/admin/submissions?div=${encodeURIComponent(slug)}&type=${type}${status ? `&status=${status}` : ""}`;
       const res = await fetch(url, { cache: "no-store" });
@@ -243,12 +265,21 @@
       const labels = await loadQuestionLabels(slug, type);
       if (!data.submissions || !data.submissions.length) {
         list.innerHTML = `<p class="ca-muted">Nothing here.</p>`;
-        return;
+        pendingHighlight = null;
+      return;
       }
       list.innerHTML = data.submissions.map((s) => renderSubmissionCard(s, labels)).join("");
       list.querySelectorAll("[data-action]").forEach((btn) => {
         btn.addEventListener("click", () => handleSubmissionAction(btn.dataset.action, btn.dataset.id, slug, status));
       });
+    if (highlightId) {
+      const card = list.querySelector(`[data-subid="${highlightId}"]`);
+      if (card) {
+        card.classList.add("ca-highlight");
+        card.scrollIntoView({ behavior: "smooth", block: "center" });
+      }
+      pendingHighlight = null;
+    }
     } catch {
       list.innerHTML = `<p class="ca-muted">Couldn't load submissions. Try refreshing.</p>`;
     }
@@ -282,7 +313,7 @@
            <button class="ca-btn-delete" data-action="delete" data-id="${s.id}">Delete</button>`
         : `<button class="ca-btn-delete" data-action="delete" data-id="${s.id}">Delete</button>`;
     return `
-      <div class="ca-submission-card">
+      <div class="ca-submission-card" data-subid="${s.id}">
         <strong>${escapeHtml(s.characterName)}</strong>
         <span class="ca-status ${s.status}">${s.status}</span>
         <div class="ca-submission-fields">

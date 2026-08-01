@@ -85,3 +85,77 @@ export async function getGuildMemberRoles(env, discordUserId) {
   const member = await res.json();
   return member.roles || [];
 }
+
+/**
+ * Lists every member of the guild who holds a specific role, using the
+ * BOT token. Paginates through the members list (Discord returns at most
+ * 1000 per page) -- most servers only need one page, but this keeps
+ * working correctly for larger ones too. Returns an empty array (never
+ * throws) if the bot cannot reach Discord or the Server Members Intent
+ * is not enabled, so a lookup failure just means no DMs go out that
+ * time, not a broken application/log submission.
+ */
+export async function getGuildMembersWithRole(env, roleId) {
+  const matched = [];
+  let after = "0";
+  for (let page = 0; page < 10; page++) {
+    let res;
+    try {
+      res = await fetch(
+        `https://discord.com/api/guilds/${GUILD_ID}/members?limit=1000&after=${after}`,
+        { headers: { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` } }
+      );
+    } catch {
+      break;
+    }
+    if (!res.ok) break;
+    const members = await res.json().catch(() => []);
+    if (!Array.isArray(members) || !members.length) break;
+    for (const m of members) {
+      if (m.user && Array.isArray(m.roles) && m.roles.includes(roleId)) {
+        matched.push(m.user.id);
+      }
+    }
+    if (members.length < 1000) break;
+    after = members[members.length - 1].user.id;
+  }
+  return matched;
+}
+
+/**
+ * Sends a Discord DM to a single user via the bot (opens/reuses a DM
+ * channel, then posts the message). Best-effort and non-fatal -- a
+ * failure here (DMs closed, bot not sharing a server with them, rate
+ * limit, etc.) is logged and swallowed so it never blocks or breaks the
+ * application/log submission that triggered it.
+ */
+export async function sendDirectMessage(env, userId, content) {
+  try {
+    const channelRes = await fetch("https://discord.com/api/users/@me/channels", {
+      method: "POST",
+      headers: {
+        Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ recipient_id: userId }),
+    });
+    if (!channelRes.ok) {
+      console.error("Couldn't open DM channel with", userId, channelRes.status);
+      return;
+    }
+    const channel = await channelRes.json();
+    const msgRes = await fetch(`https://discord.com/api/channels/${channel.id}/messages`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ content }),
+    });
+    if (!msgRes.ok) {
+      console.error("Couldn't DM", userId, msgRes.status);
+    }
+  } catch (err) {
+    console.error("Failed to send Discord DM to", userId, err);
+  }
+}

@@ -1,47 +1,120 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Master Documents — BCSO</title>
-  <meta name="description" content="Master Roster, SOP, and other official Blaine County Sheriff's Office documents." />
-  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
-  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
-  <link rel="stylesheet" href="assets/style.css" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Master Documents — BCSO</title>
+<meta name="description" content="Master Roster, SOP, and other official Blaine County Sheriff's Office documents." />
+<link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+<link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+<link rel="stylesheet" href="assets/style.css" />
 </head>
 <body>
-  <div id="site-header-mount"></div>
-  <main>
-    <section>
-      <div class="container">
-        <div class="breadcrumb"><a href="index.html">Home</a> / Master Documents</div>
-        <h1 class="page-title">Master Documents</h1>
-        <p class="page-sub">
-          Official department documents, kept up to date in Google Docs.
-          Each link opens the live document in a new tab so you always
-          see the current version.
-        </p>
-        <div id="doc-grid" class="sub-grid">
-          <!-- populated by JS from assets/documents.js -->
-        </div>
-      </div>
-    </section>
-  </main>
-  <div id="site-footer-mount"></div>
-  <script src="assets/documents.js"></script>
-  <script src="assets/main.js"></script>
-  <script>
-    function renderCards() {
-      const grid = document.getElementById("doc-grid");
-      grid.innerHTML = DOCUMENTS.map((d) => `
-        <div class="panel sub-card">
-          <h3>${d.name}</h3>
-          <p>${d.description}</p>
-          <a class="btn btn-gold" href="${d.url}" target="_blank" rel="noopener">Open Document</a>
-        </div>
-      `).join("");
-    }
-    document.addEventListener("DOMContentLoaded", renderCards);
-  </script>
+<div id="site-header-mount"></div>
+<main>
+<section>
+<div class="container">
+<div class="breadcrumb" id="doc-breadcrumb"><a href="index.html">Home</a> / Master Documents</div>
+<h1 class="page-title" id="doc-title">Master Documents</h1>
+<p class="page-sub" id="doc-subtitle">
+Official department documents, kept up to date in Google Docs.
+Each link opens the live document in a new tab so you always
+see the current version.
+</p>
+<div id="doc-grid" class="sub-grid">
+<!-- populated by JS from assets/documents.js -->
+</div>
+
+<div id="sub-doc-section">
+<h2 class="page-title" style="font-size:1.4rem; margin-top:2.5rem;">Subdivision Documents</h2>
+<p class="page-sub">Documents specific to each subdivision, added and maintained by that subdivision's own command staff.</p>
+<div id="sub-doc-grid" class="sub-grid">
+<!-- populated by JS from assets/subdivisions.js -->
+</div>
+</div>
+</div>
+</section>
+</main>
+<div id="site-footer-mount"></div>
+<script src="assets/documents.js"></script>
+<script src="assets/subdivisions.js"></script>
+<script src="assets/main.js"></script>
+<script>
+function getQueryParam(name) {
+return new URLSearchParams(window.location.search).get(name);
+}
+function findSubdivision(slug) {
+return (window.SUBDIVISIONS || []).find((s) => s.slug === slug);
+}
+function escapeHtml(str) {
+return (str ?? "").toString().replace(/[&<>"']/g, (c) => ({
+"&": "&amp;",
+"<": "&lt;",
+">": "&gt;",
+'"': "&quot;",
+"'": "&#39;",
+}[c]));
+}
+function renderMasterCards() {
+const grid = document.getElementById("doc-grid");
+grid.innerHTML = DOCUMENTS.map((d) => `
+<div class="panel sub-card">
+<h3>${d.name}</h3>
+<p>${d.description}</p>
+<a class="btn btn-gold" href="${d.url}" target="_blank" rel="noopener">Open Document</a>
+</div>
+`).join("");
+}
+function renderSubdivisionCards() {
+const grid = document.getElementById("sub-doc-grid");
+grid.innerHTML = (window.SUBDIVISIONS || []).map((s) => `
+<div class="panel sub-card">
+<span class="badge-tag">${s.short}</span>
+<h3>${s.name}</h3>
+<p>${s.description}</p>
+<a class="btn btn-gold" href="documents.html?div=${encodeURIComponent(s.slug)}">View Documents</a>
+</div>
+`).join("");
+}
+async function renderSubdivisionDocPage(sub) {
+document.getElementById("doc-breadcrumb").innerHTML =
+`<a href="index.html">Home</a> / <a href="documents.html">Master Documents</a> / ${escapeHtml(sub.name)}`;
+document.getElementById("doc-title").textContent = sub.name + " Documents";
+document.title = sub.name + " Documents — BCSO";
+document.getElementById("doc-subtitle").textContent =
+"Documents specific to the " + sub.name + ", kept up to date by its own command staff.";
+document.getElementById("sub-doc-section").style.display = "none";
+const grid = document.getElementById("doc-grid");
+grid.innerHTML = "Loading…";
+try {
+const res = await fetch(`/api/documents?div=${encodeURIComponent(sub.slug)}`, { cache: "no-store" });
+const data = await res.json().catch(() => ({}));
+const docs = data.documents || [];
+if (!docs.length) {
+grid.innerHTML = `<p style="color: var(--muted);">No documents have been added for ${escapeHtml(sub.name)} yet.</p>`;
+return;
+}
+grid.innerHTML = docs.map((d) => `
+<div class="panel sub-card">
+<h3>${escapeHtml(d.name)}</h3>
+<p>${escapeHtml(d.description)}</p>
+<a class="btn btn-gold" href="${d.url}" target="_blank" rel="noopener">Open Document</a>
+</div>
+`).join("");
+} catch {
+grid.innerHTML = `<p style="color: var(--muted);">Couldn't load documents. Try refreshing.</p>`;
+}
+}
+document.addEventListener("DOMContentLoaded", () => {
+const slug = getQueryParam("div");
+const sub = slug ? findSubdivision(slug) : null;
+if (sub) {
+renderSubdivisionDocPage(sub);
+} else {
+renderMasterCards();
+renderSubdivisionCards();
+}
+});
+</script>
 </body>
 </html>

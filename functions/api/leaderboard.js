@@ -20,9 +20,15 @@
  * period=all (default) is all-time; period=month is the current
  * calendar month only (server clock, UTC, matching D1's datetime('now')).
  *
- * Deliberately excludes discord_id from the response -- badge number
- * and character name are enough to identify someone on a public board
+ * People are grouped by discord_id, not badge number -- a badge typo or
+ * a mid-career badge change would otherwise split one deputy into two
+ * separate leaderboard rows. discord_id itself is never included in the
+ * response -- badge number and character name (both from that person's
+ * most recent log) are enough to identify someone on a public board
  * without publishing their Discord account.
+ *
+ * Individual log entries omit the shift summary text -- the board shows
+ * who logged what hours and when, not the private details of the shift.
  *
  * Fails soft (empty leaderboard/log) if the database isn't set up yet
  * or anything goes wrong -- the page still renders, it just shows no
@@ -58,7 +64,7 @@ export async function onRequestGet(context) {
 
   try {
     let query =
-      "SELECT subdivision_slug, character_name, badge_number, core_fields_json, created_at " +
+      "SELECT discord_id, subdivision_slug, character_name, badge_number, core_fields_json, created_at " +
       "FROM submissions WHERE form_type = 'log' AND status != 'rejected'";
     const binds = [];
     if (div) {
@@ -75,8 +81,11 @@ export async function onRequestGet(context) {
       .all();
     const rows = results || [];
 
-    // --- Aggregate into per-person totals, keyed by badge number -------
-    const byBadge = new Map();
+    // --- Aggregate into per-person totals, keyed by Discord ID ----------
+    // Rows arrive newest-first, so the first row seen for a given person
+    // is their most recent log -- that's the one whose character name /
+    // badge / subdivision we display for them.
+    const byPerson = new Map();
     const logEntries = [];
     for (const row of rows) {
       let core = {};
@@ -87,10 +96,10 @@ export async function onRequestGet(context) {
       }
       const hours = Number(core.hoursOnDuty);
       const validHours = Number.isFinite(hours) && hours > 0 ? hours : 0;
-      const badge = row.badge_number || row.character_name || "unknown";
+      const personKey = row.discord_id || row.badge_number || row.character_name || "unknown";
 
-      if (!byBadge.has(badge)) {
-        byBadge.set(badge, {
+      if (!byPerson.has(personKey)) {
+        byPerson.set(personKey, {
           characterName: row.character_name,
           badgeNumber: row.badge_number,
           subdivisionSlug: row.subdivision_slug,
@@ -98,13 +107,9 @@ export async function onRequestGet(context) {
           count: 0,
         });
       }
-      const entry = byBadge.get(badge);
+      const entry = byPerson.get(personKey);
       entry.hours += validHours;
       entry.count += 1;
-      // Global view mixes subdivisions per person is unlikely (one badge
-      // usually belongs to one subdivision's roster) but if it happens,
-      // keep whichever subdivision logged most recently.
-      entry.subdivisionSlug = row.subdivision_slug;
 
       if (logEntries.length < LOG_LIMIT) {
         logEntries.push({
@@ -112,13 +117,12 @@ export async function onRequestGet(context) {
           badgeNumber: row.badge_number,
           subdivisionSlug: row.subdivision_slug,
           hours: validHours,
-          summary: typeof core.summary === "string" ? core.summary : "",
           createdAt: row.created_at,
         });
       }
     }
 
-    const people = Array.from(byBadge.values()).map((p) => ({
+    const people = Array.from(byPerson.values()).map((p) => ({
       ...p,
       hours: Math.round(p.hours * 100) / 100,
     }));

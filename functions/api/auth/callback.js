@@ -47,6 +47,7 @@ export async function onRequestGet(context) {
     const tokenData = await exchangeCode(env, code, redirectUri);
     const discordUser = await getOAuthUser(tokenData.access_token);
     const roles = await getGuildMemberRoles(env, discordUser.id);
+  const isHighCommand = roles.includes("1533008196023746591");
     const permissions = computePermissions(roles);
 
     if (!permissions.hasCommandLogin) {
@@ -58,7 +59,8 @@ export async function onRequestGet(context) {
       username: discordUser.username,
       subdivisions: permissions.subdivisions,
       exp: Date.now() + SESSION_HOURS * 60 * 60 * 1000,
-    });
+    
+    isHighCommand,});
 
     const headers = new Headers();
     const state = url.searchParams.get("state") || "";

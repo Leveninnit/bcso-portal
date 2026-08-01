@@ -451,3 +451,56 @@ footer.site-footer a {
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
+
+/* ---------- Quick links (cross-page navigation) ---------- */
+
+.quick-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 1.25rem 0 1.75rem;
+}
+
+.quick-links-label {
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 0.35rem;
+}
+
+.quick-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.85rem;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease, background 0.15s ease;
+}
+
+.quick-link:hover {
+  border-color: var(--gold);
+  background: rgba(201, 162, 39, 0.08);
+  transform: translateY(-2px);
+}
+
+.quick-link-icon {
+  font-size: 0.9rem;
+}
+
+@media (max-width: 480px) {
+  .quick-links {
+    gap: 0.4rem;
+  }
+  .quick-link {
+    font-size: 0.8rem;
+    padding: 0.35rem 0.75rem;
+  }
+}

@@ -92,6 +92,18 @@
 .ca-status.accepted { background: rgba(44, 92, 58, 0.4); color: #6fbf8a; }
 .ca-status.rejected { background: rgba(140, 40, 40, 0.35); color: #e08080; }
 
+/* Deep-linked submission (from a DM notification) gets scrolled to and
+   flashed so it stands out among the rest of the list. */
+.ca-submission-card.ca-highlight {
+  border-color: var(--gold-bright, #c9a227);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.35);
+  animation: ca-highlight-fade 2.5s ease-out 1;
+}
+@keyframes ca-highlight-fade {
+  0% { background: rgba(201, 162, 39, 0.3); }
+  100% { background: transparent; }
+}
+
 .ca-submission-fields {
      display: grid;
      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));

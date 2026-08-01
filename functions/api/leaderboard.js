@@ -7,8 +7,10 @@
  * Leaderboards page.
  *
  * Aggregates activity-log submissions ('log' rows, NOT applications)
- * into two rankings -- total hours and activity count -- plus a capped
- * list of the individual log entries for the activity-log viewer.
+ * into two individual rankings -- total hours and activity count -- a
+ * subdivision-level ranking (same two metrics, totalled per subdivision
+ * instead of per person), plus a capped list of the individual log
+ * entries for the activity-log viewer.
  *
  * Counting rule: every submitted log counts EXCEPT rejected ones (so
  * pending + accepted both count). This gives command staff an escape
@@ -16,7 +18,9 @@
  * without requiring every real log to be manually accepted first.
  *
  * div=all (or omitted) aggregates across every subdivision (the
- * "Global" board). div=<slug> scopes everything to one subdivision.
+ * "Global" board). div=<slug> scopes everything to one subdivision --
+ * the subdivision ranking is only meaningful on the Global view, so the
+ * frontend hides it when a single subdivision is selected.
  * period=all (default) is all-time; period=month is the current
  * calendar month only (server clock, UTC, matching D1's datetime('now')).
  *
@@ -46,7 +50,11 @@ function jsonResponse(body, status) {
 }
 
 function emptyPayload() {
-  return { leaderboard: { byHours: [], byCount: [] }, log: [] };
+  return {
+    leaderboard: { byHours: [], byCount: [] },
+    subdivisions: { byHours: [], byCount: [] },
+    log: [],
+  };
 }
 
 export async function onRequestGet(context) {
@@ -86,7 +94,10 @@ export async function onRequestGet(context) {
     // is their most recent log -- that's the one whose character name /
     // badge / subdivision we display for them.
     const byPerson = new Map();
+    // --- Aggregate into per-subdivision totals in the same pass ---------
+    const bySubdivision = new Map();
     const logEntries = [];
+
     for (const row of rows) {
       let core = {};
       try {
@@ -111,6 +122,14 @@ export async function onRequestGet(context) {
       entry.hours += validHours;
       entry.count += 1;
 
+      const subKey = row.subdivision_slug || "unknown";
+      if (!bySubdivision.has(subKey)) {
+        bySubdivision.set(subKey, { subdivisionSlug: subKey, hours: 0, count: 0 });
+      }
+      const subEntry = bySubdivision.get(subKey);
+      subEntry.hours += validHours;
+      subEntry.count += 1;
+
       if (logEntries.length < LOG_LIMIT) {
         logEntries.push({
           characterName: row.character_name,
@@ -134,7 +153,25 @@ export async function onRequestGet(context) {
       .sort((a, b) => b.count - a.count || b.hours - a.hours)
       .map((p, i) => ({ rank: i + 1, ...p }));
 
-    return jsonResponse({ leaderboard: { byHours, byCount }, log: logEntries }, 200);
+    const subs = Array.from(bySubdivision.values()).map((s) => ({
+      ...s,
+      hours: Math.round(s.hours * 100) / 100,
+    }));
+    const subByHours = [...subs]
+      .sort((a, b) => b.hours - a.hours || b.count - a.count)
+      .map((s, i) => ({ rank: i + 1, ...s }));
+    const subByCount = [...subs]
+      .sort((a, b) => b.count - a.count || b.hours - a.hours)
+      .map((s, i) => ({ rank: i + 1, ...s }));
+
+    return jsonResponse(
+      {
+        leaderboard: { byHours, byCount },
+        subdivisions: { byHours: subByHours, byCount: subByCount },
+        log: logEntries,
+      },
+      200
+    );
   } catch (err) {
     console.error("Failed to build leaderboard (non-fatal):", err);
     return jsonResponse(emptyPayload(), 200);

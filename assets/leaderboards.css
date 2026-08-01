@@ -215,12 +215,6 @@
   margin-left: auto;
 }
 
-.lb-log-summary {
-  margin: 0.6rem 0 0;
-  color: var(--silver);
-  font-size: 0.9rem;
-}
-
 @media (max-width: 640px) {
   .lb-controls {
     flex-direction: column;

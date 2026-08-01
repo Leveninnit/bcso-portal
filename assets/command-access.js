@@ -153,13 +153,14 @@
     const showApplications = !info.logOnly;
 
     const innerTabsHtml = `
-      <div class="ca-inner-tabs" id="ca-form-type-tabs">
+      <div class="ca-inner-tabs" id="ca-form-type-tabs" style="display:${activeInnerTab === "documents" ? "none" : ""};">
         ${showApplications ? `<button type="button" class="ca-inner-tab-btn" data-type="application">Applications</button>` : ""}
         <button type="button" class="ca-inner-tab-btn" data-type="log">Activity Logs</button>
       </div>
       <div class="ca-inner-tabs" id="ca-inner-tabs">
         <button type="button" class="ca-inner-tab-btn" data-tab="review">Pending Review</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="customize">Customize Questions</button>
+        <button type="button" class="ca-inner-tab-btn" data-tab="documents">Documents</button>
       </div>
       <div id="ca-panel"></div>
     `;
@@ -184,8 +185,10 @@
 
     if (activeInnerTab === "review") {
       renderReviewPanel();
-    } else {
+    } else if (activeInnerTab === "customize") {
       renderCustomizePanel();
+    } else {
+      renderDocumentsPanel();
     }
   }
 
@@ -562,6 +565,163 @@
   }
 
   // ---------------------------------------------------------------------
+// Documents — lets a subdivision's command staff manage the documents
+// shown on that subdivision's own Documents page (documents.html?div=slug),
+// linked from the Master Documents page's subdivision grid.
+// ---------------------------------------------------------------------
+async function renderDocumentsPanel() {
+  const panel = el("ca-panel");
+  panel.innerHTML = `
+    <div class="panel">
+      <p class="ca-section-title">Subdivision Documents</p>
+      <p class="ca-muted">These show up on this subdivision's own Documents page, linked from the Master Documents page. Visible to everyone, not just command staff.</p>
+      <div id="ca-document-list">Loading…</div>
+      <div class="ca-question-form" id="ca-add-document-form"></div>
+    </div>
+  `;
+  renderDocumentForm(null);
+  await loadDocuments();
+}
+
+async function loadDocuments() {
+  const list = el("ca-document-list");
+  const slug = activeSlug;
+  try {
+    const res = await fetch(`/api/admin/documents?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+    const data = await res.json();
+    if (!data.documents || !data.documents.length) {
+      list.innerHTML = `<p class="ca-muted">No documents yet.</p>`;
+      return;
+    }
+    list.innerHTML = data.documents.map((d, i) => renderDocumentRow(d, i, data.documents.length)).join("");
+    list.querySelectorAll("[data-daction]").forEach((btn) => {
+      btn.addEventListener("click", () => handleDocumentAction(btn.dataset.daction, data.documents, btn.dataset.did));
+    });
+  } catch {
+    list.innerHTML = `<p class="ca-muted">Couldn't load documents. Try refreshing.</p>`;
+  }
+}
+
+function renderDocumentRow(d, index, total) {
+  return `
+    <div class="ca-question-row">
+      <div>
+        <strong>${escapeHtml(d.name)}</strong>
+        <div class="ca-question-meta">${d.description ? escapeHtml(d.description) : "No description"}</div>
+        <div><a href="${escapeHtml(d.url)}" target="_blank" rel="noopener">${escapeHtml(d.url)}</a></div>
+      </div>
+      <div class="ca-actions">
+        <button class="ca-btn-delete" data-daction="up" data-did="${d.id}" ${index === 0 ? "disabled" : ""}>↑</button>
+        <button class="ca-btn-delete" data-daction="down" data-did="${d.id}" ${index === total - 1 ? "disabled" : ""}>↓</button>
+        <button class="ca-btn-delete" data-daction="edit" data-did="${d.id}">Edit</button>
+        <button class="ca-btn-reject" data-daction="delete" data-did="${d.id}">Delete</button>
+      </div>
+    </div>
+  `;
+}
+
+async function handleDocumentAction(action, documents, did) {
+  const d = documents.find((x) => String(x.id) === String(did));
+  if (!d) return;
+  if (action === "delete") {
+    if (!confirm(`Delete document "${d.name}"? This can't be undone.`)) return;
+    await fetch(`/api/admin/documents?id=${d.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+    loadDocuments();
+    return;
+  }
+  if (action === "edit") {
+    renderDocumentForm(d);
+    return;
+  }
+  if (action === "up" || action === "down") {
+    const idx = documents.findIndex((x) => String(x.id) === String(did));
+    const swapIdx = action === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= documents.length) return;
+    const other = documents[swapIdx];
+    const aOrder = d.sortOrder;
+    const bOrder = other.sortOrder;
+    await Promise.all([
+      putDocument({ ...d, sortOrder: bOrder }),
+      putDocument({ ...other, sortOrder: aOrder }),
+    ]);
+    loadDocuments();
+  }
+}
+
+function putDocument(d) {
+  return fetch("/api/admin/documents", {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      id: d.id,
+      subdivisionSlug: activeSlug,
+      name: d.name,
+      description: d.description,
+      url: d.url,
+      sortOrder: d.sortOrder,
+    }),
+  });
+}
+
+function renderDocumentForm(editing) {
+  const formBox = el("ca-add-document-form");
+  const isEdit = !!editing;
+  formBox.innerHTML = `
+    <h4>${isEdit ? "Edit document" : "Add a document"}</h4>
+    <div class="form-row">
+      <label>Document name</label>
+      <input type="text" id="ca-d-name" value="${escapeHtml(editing?.name || "")}" placeholder="e.g. Field Training Manual" />
+    </div>
+    <div class="form-row">
+      <label>Description (optional)</label>
+      <input type="text" id="ca-d-description" value="${escapeHtml(editing?.description || "")}" placeholder="Short description" />
+    </div>
+    <div class="form-row">
+      <label>Link URL</label>
+      <input type="text" id="ca-d-url" value="${escapeHtml(editing?.url || "")}" placeholder="https://..." />
+    </div>
+    <div class="ca-actions">
+      <button class="ca-btn-accept" id="ca-d-save">${isEdit ? "Save changes" : "Add document"}</button>
+      ${isEdit ? `<button class="ca-btn-delete" id="ca-d-cancel">Cancel</button>` : ""}
+    </div>
+  `;
+
+  if (isEdit) {
+    el("ca-d-cancel").addEventListener("click", () => renderDocumentForm(null));
+  }
+  el("ca-d-save").addEventListener("click", async () => {
+    const name = el("ca-d-name").value.trim();
+    const description = el("ca-d-description").value.trim();
+    const url = el("ca-d-url").value.trim();
+    if (!name) {
+      alert("Please enter the document name.");
+      return;
+    }
+    if (!/^https?:\/\//i.test(url)) {
+      alert("Please enter a valid link starting with http:// or https://");
+      return;
+    }
+    const payload = {
+      subdivisionSlug: activeSlug,
+      name,
+      description,
+      url,
+    };
+    if (isEdit) {
+      await putDocument({ ...payload, id: editing.id, sortOrder: editing.sortOrder });
+    } else {
+      await fetch("/api/admin/documents", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, sortOrder: 9999 }),
+      });
+    }
+    renderDocumentForm(null);
+    loadDocuments();
+  });
+}
+
+// ---------------------------------------------------------------------
   // Deputy Movement — department-wide copy-paste generator + templates
   // ---------------------------------------------------------------------
   function renderMovementTab(container) {

@@ -1,0 +1,58 @@
+/* ---------- Meet the Team admin page ---------- */
+
+.team-admin-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.team-admin-card h2 {
+  margin: 0 0 1rem;
+  color: var(--gold-bright);
+  font-size: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.team-admin-card label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.9rem;
+}
+
+.team-admin-card input,
+.team-admin-card select,
+.team-admin-card textarea {
+  display: block;
+  width: 100%;
+  margin-top: 0.35rem;
+  background: #0c1c13;
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.9rem;
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: normal;
+  font-family: inherit;
+}
+
+.team-admin-card input:focus,
+.team-admin-card select:focus,
+.team-admin-card textarea:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
+}
+
+.ta-save-status {
+  margin-left: 0.75rem;
+  color: var(--muted);
+  font-size: 0.85rem;
+}

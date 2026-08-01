@@ -24,8 +24,15 @@
  * Access). Missing or malformed `answers` never blocks submission —
  * custom questions are additive, not required for the base form to
  * work.
+ *
+ * New: on top of the Discord channel ping, this also DMs every member
+ * holding the subdivision's command role, with a direct link into
+ * Command Access for this specific application. Best-effort — run via
+ * context.waitUntil() so a slow/failed DM never delays or breaks the
+ * applicant's response, and any one DM failing (closed DMs, bot not
+ * sharing a server with them, etc.) never affects the others.
  */
-import { SUBDIVISION_COMMAND_ROLES } from "../_lib/discord.js";
+import { SUBDIVISION_COMMAND_ROLES, getGuildMembersWithRole, sendDirectMessage } from "../_lib/discord.js";
 
 const FIELD_LIMITS = {
   characterName: 100,
@@ -57,6 +64,24 @@ function jsonResponse(body, status) {
     headers: { "Content-Type": "application/json" },
   });
 }
+
+/**
+ * DMs every member holding a subdivision's command role. Best-effort and
+ * non-fatal — a failure here (bot not in the server, Server Members
+ * Intent off, rate limit, etc.) is logged and swallowed so it never
+ * throws back into the caller.
+ */
+async function notifyCommandStaffByDm(env, roleId, message) {
+  try {
+    const memberIds = await getGuildMembersWithRole(env, roleId);
+    for (const userId of memberIds) {
+      await sendDirectMessage(env, userId, message);
+    }
+  } catch (err) {
+    console.error("Failed to DM command staff about new application:", err);
+  }
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
   let data;
@@ -177,9 +202,10 @@ export async function onRequestPost(context) {
     return jsonResponse({ error: "Could not reach Discord right now. Please try again in a moment." }, 502);
   }
   // --- Record it for Command Access (best-effort; never blocks the applicant) ---
+  let submissionId = null;
   if (env.DB) {
     try {
-      await env.DB.prepare(
+      const insertResult = await env.DB.prepare(
         `INSERT INTO submissions (subdivision_slug, form_type, discord_id, character_name, badge_number, rank, core_fields_json, answers_json)
          VALUES (?, 'application', ?, ?, ?, ?, ?, ?)`
       )
@@ -193,9 +219,16 @@ export async function onRequestPost(context) {
           JSON.stringify(answers)
         )
         .run();
+      submissionId = insertResult?.meta?.last_row_id ?? null;
     } catch (err) {
       console.error("Failed to record application in D1 (non-fatal):", err);
     }
+  }
+  // --- DM the subdivision's command staff with a direct link (best-effort) ---
+  if (submissionId && commandRoleId) {
+    const reviewLink = `${origin}/command-access.html?div=${encodeURIComponent(subdivisionSlug)}&type=application&id=${submissionId}`;
+    const dmMessage = `📋 New **${subdivisionName}** application from **${characterName}** — review it here: ${reviewLink}`;
+    context.waitUntil(notifyCommandStaffByDm(env, commandRoleId, dmMessage));
   }
   return jsonResponse({ ok: true }, 200);
 }

@@ -1,0 +1,239 @@
+/* ---------- Leaderboards page ---------- */
+
+.lb-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.lb-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.lb-tab {
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--silver);
+  border-radius: 999px;
+  padding: 0.4rem 1rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: border-color 0.12s ease, color 0.12s ease, background 0.12s ease;
+}
+
+.lb-tab:hover {
+  border-color: var(--gold);
+  color: var(--gold-bright);
+}
+
+.lb-tab.active {
+  background: rgba(201, 162, 39, 0.14);
+  border-color: var(--gold);
+  color: var(--gold-bright);
+}
+
+.lb-controls-right {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.lb-period-toggle {
+  display: inline-flex;
+  border: 1px solid var(--panel-border);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.lb-period-toggle button {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  cursor: pointer;
+}
+
+.lb-period-toggle button.active {
+  background: var(--gold);
+  color: #16240f;
+}
+
+.lb-search {
+  background: #0c1c13;
+  border: 1px solid var(--panel-border);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  font-size: 0.88rem;
+  min-width: 220px;
+}
+
+.lb-search:focus {
+  outline: none;
+  border-color: var(--gold);
+  box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
+}
+
+.lb-status {
+  text-align: center;
+  color: var(--muted);
+  font-size: 0.85rem;
+  min-height: 1.2rem;
+  margin-bottom: 0.75rem;
+}
+
+.lb-board-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1.5rem;
+}
+
+.lb-board h2 {
+  margin: 0 0 1rem;
+  color: var(--gold-bright);
+  font-size: 1.05rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lb-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.lb-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.55rem 0.7rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+}
+
+.lb-row:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.lb-medal {
+  font-size: 1.15rem;
+  width: 1.6rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.lb-rank-num {
+  width: 1.6rem;
+  text-align: center;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.85rem;
+  flex-shrink: 0;
+}
+
+.lb-name {
+  color: var(--text);
+  font-weight: 600;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lb-badge-num {
+  color: var(--muted);
+  font-size: 0.82rem;
+  flex-shrink: 0;
+}
+
+.lb-sub-tag {
+  background: rgba(201, 162, 39, 0.12);
+  color: var(--gold-bright);
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 0.05rem 0.55rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  flex-shrink: 0;
+}
+
+.lb-value {
+  color: var(--gold-bright);
+  font-weight: 700;
+  font-size: 0.95rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.lb-empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.lb-log-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.lb-log-entry {
+  padding: 1rem 1.25rem;
+}
+
+.lb-log-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.88rem;
+}
+
+.lb-log-hours {
+  color: var(--gold-bright);
+  font-weight: 700;
+}
+
+.lb-log-date {
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-left: auto;
+}
+
+.lb-log-summary {
+  margin: 0.6rem 0 0;
+  color: var(--silver);
+  font-size: 0.9rem;
+}
+
+@media (max-width: 640px) {
+  .lb-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .lb-controls-right {
+    justify-content: space-between;
+  }
+  .lb-search {
+    min-width: 0;
+    flex: 1;
+  }
+  .lb-log-date {
+    margin-left: 0;
+  }
+}

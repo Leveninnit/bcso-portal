@@ -110,7 +110,6 @@ function renderLogList(query) {
             <span class="lb-log-hours">${formatHours(e.hours)}h</span>
             <span class="lb-log-date">${escapeHtml(formatDate(e.createdAt))}</span>
           </div>
-          ${e.summary ? `<p class="lb-log-summary">${escapeHtml(e.summary)}</p>` : ""}
         </div>`
     )
     .join("");

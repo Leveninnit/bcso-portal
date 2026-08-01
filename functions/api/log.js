@@ -51,6 +51,16 @@ function hoursToHms(hoursDecimal) {
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+function cleanAnswers(answers) {
+  if (!answers || typeof answers !== "object") return {};
+  const out = {};
+  for (const [key, value] of Object.entries(answers)) {
+    if (!/^\d+$/.test(String(key))) continue; // question ids are numeric
+    out[key] = clean(String(value ?? ""), 500);
+  }
+  return out;
+}
+
 function cleanRtd(rtd) {
   const r = rtd && typeof rtd === "object" ? rtd : {};
   const c = (v) => clean(v, 60);
@@ -161,6 +171,7 @@ export async function onRequestPost(context) {
   const summary = clean(data.summary, FIELD_LIMITS.summary);
   const subdivisionName = clean(data.subdivisionName, FIELD_LIMITS.subdivisionName);
   const subdivisionSlug = clean(data.subdivisionSlug, 30).toLowerCase().replace(/[^a-z0-9_-]/g, "");
+const answers = cleanAnswers(data.answers);
   const hoursOnDuty = Number(data.hoursOnDuty);
   if (!Number.isFinite(hoursOnDuty) || hoursOnDuty <= 0 || hoursOnDuty > 24) {
     return jsonResponse({ error: "Hours on duty must be a number between 0 and 24." }, 400);
@@ -282,7 +293,29 @@ export async function onRequestPost(context) {
     await forwardToSheet(env, { badgeNumber, discordId, rank, hoursOnDuty, rtd });
   }
 
-  return jsonResponse({ ok: true }, 200);
+  // --- Record it for Command Access (best-effort; never blocks the submitter) ---
+if (env.DB) {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO submissions (subdivision_slug, form_type, discord_id, character_name, badge_number, rank, core_fields_json, answers_json)
+       VALUES (?, 'log', ?, ?, ?, ?, ?, ?)`
+    )
+      .bind(
+        subdivisionSlug,
+        discordId,
+        characterName,
+        badgeNumber,
+        rank,
+        JSON.stringify({ hoursOnDuty, summary, rtd }),
+        JSON.stringify(answers)
+      )
+      .run();
+  } catch (err) {
+    console.error("Failed to record activity log in D1 (non-fatal):", err);
+  }
+}
+
+return jsonResponse({ ok: true }, 200);
 }
 
 // Any method other than POST gets a clean 405 instead of falling through

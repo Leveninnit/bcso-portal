@@ -23,5 +23,14 @@ export async function onRequestGet(context) {
   authorizeUrl.searchParams.set("redirect_uri", redirectUri);
   authorizeUrl.searchParams.set("response_type", "code");
   authorizeUrl.searchParams.set("scope", "identify");
+
+  // Optional deep link (e.g. from a DM notification pointing at one
+  // application/log) -- round-tripped through OAuth's "state" param so
+  // command-access.js can jump straight there once login finishes.
+  // Tightly whitelisted so this can never become an open redirect.
+  const returnTo = url.searchParams.get("returnTo") || "";
+  if (/^div=[a-z0-9_-]{1,30}(&type=(application|log))?(&id=\d{1,10})?$/.test(returnTo)) {
+    authorizeUrl.searchParams.set("state", returnTo);
+  }
   return Response.redirect(authorizeUrl.toString(), 302);
 }

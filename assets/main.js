@@ -28,7 +28,7 @@ function renderHeader() {
         <img src="assets/bcso-crest.png" alt="BCSO Crest" />
         <span class="brand-text">
           <strong>Blaine County Sheriff's Office</strong>
-          <span>Official Applications Portal</span>
+          <span>Official Deputy Portal</span>
         </span>
       </a>
       <nav class="main-nav">${links}</nav>

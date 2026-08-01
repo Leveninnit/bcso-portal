@@ -99,3 +99,15 @@ updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 
 CREATE INDEX IF NOT EXISTS idx_subdivision_documents_lookup
 ON subdivision_documents (subdivision_slug, sort_order);
+
+CREATE TABLE IF NOT EXISTS team_roster (
+  slot_number INTEGER PRIMARY KEY CHECK (slot_number BETWEEN 1 AND 5),
+  character_name TEXT,
+  rank_title TEXT,
+  subdivision_slug TEXT,
+  bio TEXT,
+  photo_url TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+INSERT OR IGNORE INTO team_roster (slot_number) VALUES (1), (2), (3), (4), (5);

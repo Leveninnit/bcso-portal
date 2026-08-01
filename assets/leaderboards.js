@@ -100,7 +100,7 @@ function renderPodium(entries, metricKey, metricSuffix, showSubTag, nameField, b
           showSubTag && p.subdivisionSlug
             ? `<span class="lb-sub-tag">${escapeHtml(subShort(p.subdivisionSlug))}</span>`
             : "";
-        const label = nameField ? name : subFullName(p[subField]);
+        const label = nameField ? name : subShort(p[subField]);
         return `
         <div class="lb-podium-item lb-podium-place-${i + 1}">
           <div class="lb-podium-medal">${MEDALS[i]}</div>
@@ -165,7 +165,7 @@ function renderSubdivisionList(containerId, subs, metricKey, metricSuffix) {
             return `
             <div class="lb-row">
               ${rankBadge(i + 3)}
-              <span class="lb-name">${escapeHtml(subFullName(s.subdivisionSlug))}</span>
+              <span class="lb-name">${escapeHtml(subShort(s.subdivisionSlug))}</span>
               <span class="lb-value">${value}${metricSuffix}</span>
             </div>`;
           })

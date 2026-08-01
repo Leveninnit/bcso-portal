@@ -63,7 +63,7 @@ const SUBDIVISIONS = [
   },
   {
     slug: "srt",
-    name: "Special Response Team",
+    name: "Strategic Response Team",
     short: "SRT",
     description:
       "High-risk tactical unit handling barricaded suspects, warrant service, and other specialist operations. SRT does not take public applications through this portal — activity is tracked via the Activity Log only.",

@@ -504,3 +504,29 @@ footer.site-footer a {
     padding: 0.35rem 0.75rem;
   }
 }
+
+/* ---------- Per-subdivision Dispatch section (on Applications cards) ---------- */
+
+.sub-dispatch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding-top: 0.9rem;
+  border-top: 1px dashed var(--panel-border);
+}
+
+.sub-dispatch-label {
+  width: 100%;
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.sub-dispatch .quick-link {
+  font-size: 0.8rem;
+  padding: 0.3rem 0.7rem;
+}

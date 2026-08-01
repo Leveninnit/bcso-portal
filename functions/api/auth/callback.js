@@ -61,7 +61,12 @@ export async function onRequestGet(context) {
     });
 
     const headers = new Headers();
-    headers.set("Location", `${url.origin}/command-access.html`);
+    const state = url.searchParams.get("state") || "";
+  const redirectBase = `${url.origin}/command-access.html`;
+  const redirectTarget = /^div=[a-z0-9_-]{1,30}(&type=(application|log))?(&id=\d{1,10})?$/.test(state)
+    ? `${redirectBase}?${state}`
+    : redirectBase;
+  headers.set("Location", redirectTarget);
     headers.append(
       "Set-Cookie",
       `bcso_session=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_HOURS * 3600}`

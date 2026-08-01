@@ -79,3 +79,23 @@ CREATE TABLE IF NOT EXISTS field_labels (
   updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY (subdivision_slug, form_type, field_key)
 );
+
+-- Subdivision-specific documents shown on that subdivision's own
+-- Documents page (documents.html?div=slug), linked from the Master
+-- Documents page's subdivision grid. Command staff holding a
+-- subdivision's command role can add, edit, and delete these from the
+-- Command Access dashboard's "Documents" tab. Visible to everyone,
+-- not just command staff -- same as the rest of the Documents pages.
+CREATE TABLE IF NOT EXISTS subdivision_documents (
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+subdivision_slug TEXT NOT NULL,
+name TEXT NOT NULL,
+description TEXT NOT NULL DEFAULT '',
+url TEXT NOT NULL,
+sort_order INTEGER NOT NULL DEFAULT 0,
+created_at TEXT NOT NULL DEFAULT (datetime('now')),
+updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_subdivision_documents_lookup
+ON subdivision_documents (subdivision_slug, sort_order);

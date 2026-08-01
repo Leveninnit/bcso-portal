@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Leaderboards — BCSO</title>
+  <meta name="description" content="Blaine County Sheriff's Office activity leaderboards — hours and activity counts by subdivision." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+  <link rel="stylesheet" href="assets/leaderboards.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section>
+      <div class="container">
+        <div class="breadcrumb"><a href="index.html">Home</a> / Leaderboards</div>
+        <h1 class="page-title" id="lb-title">Leaderboards</h1>
+        <p class="page-sub">
+          See who's putting in the hours across the department. Every
+          submitted activity log counts toward the board except ones
+          command staff have rejected.
+        </p>
+
+        <div class="lb-controls">
+          <div class="lb-tabs" id="lb-div-tabs">
+            <!-- populated by JS: Global + each subdivision -->
+          </div>
+          <div class="lb-controls-right">
+            <div class="lb-period-toggle" id="lb-period-toggle">
+              <button type="button" data-period="all" class="active">All-Time</button>
+              <button type="button" data-period="month">This Month</button>
+            </div>
+            <input
+              type="search"
+              id="lb-search"
+              class="lb-search"
+              placeholder="Search by name or badge #…"
+              autocomplete="off"
+            />
+          </div>
+        </div>
+
+        <div id="lb-status" class="lb-status"></div>
+
+        <div class="lb-board-grid">
+          <div class="panel lb-board">
+            <h2>By Hours</h2>
+            <div id="lb-hours-list" class="lb-list"></div>
+          </div>
+          <div class="panel lb-board">
+            <h2>By Activities</h2>
+            <div id="lb-count-list" class="lb-list"></div>
+          </div>
+        </div>
+
+        <h2 class="page-title" style="font-size:1.4rem; margin-top:2.5rem;">Activity Log</h2>
+        <p class="page-sub">Individual submitted shift logs for this view.</p>
+        <div id="lb-log-list" class="lb-log-list"></div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/subdivisions.js"></script>
+  <script src="assets/main.js"></script>
+  <script src="assets/leaderboards.js"></script>
+</body>
+</html>

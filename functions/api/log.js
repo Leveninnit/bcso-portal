@@ -188,6 +188,58 @@ async function forwardSrtLogToSheet(env, { discordId, rank, hoursOnDuty, summary
     console.error("Failed to forward SRT log to Google Sheet:", err);
   }
 }
+
+// Best-effort forward to the Google Sheet via Apps Script for OCD. Mirrors
+// forwardSrtLogToSheet's behavior above, but targets the OCD web app and
+// secret and pulls its 2 custom-question answers (division, signature) out
+// of the answers object by matching each question's label.
+async function getOcdQuestionIds(env) {
+  if (!env.DB) return {};
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT id, label FROM questions WHERE subdivision_slug = 'ocd' AND form_type = 'log'"
+    ).all();
+    const map = {};
+    for (const row of results || []) {
+      const label = String(row.label || "").trim().toLowerCase();
+      if (label.startsWith("what division")) map.division = row.id;
+      else if (label.startsWith("electronic signature")) map.signature = row.id;
+    }
+    return map;
+  } catch (err) {
+    console.error("Failed to load OCD question ids:", err);
+    return {};
+  }
+}
+
+async function forwardOcdLogToSheet(env, { discordId, rank, characterName, badgeNumber, hoursOnDuty, summary, answers }) {
+  if (!env.OCD_SHEET_LOG_WEBHOOK_URL || !env.OCD_SHEET_LOG_SECRET) return;
+  try {
+    const ids = await getOcdQuestionIds(env);
+    const payload = {
+      token: env.OCD_SHEET_LOG_SECRET,
+      discordId,
+      rank,
+      rpName: characterName,
+      badgeNumber,
+      division: ids.division ? answers[String(ids.division)] || "" : "",
+      duration: hoursToHms(hoursOnDuty),
+      summary,
+      signature: ids.signature ? answers[String(ids.signature)] || "" : "",
+    };
+    const res = await fetch(env.OCD_SHEET_LOG_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.error("OCD sheet sync rejected the log:", res.status, await res.text().catch(() => ""));
+    }
+  } catch (err) {
+    console.error("Failed to forward OCD log to Google Sheet:", err);
+  }
+}
+
 export async function onRequestPost(context) {
   const { request, env } = context;
   let data;
@@ -355,6 +407,10 @@ const answers = cleanAnswers(data.answers);
   if (subdivisionSlug === "srt") {
     await forwardSrtLogToSheet(env, { discordId, rank, hoursOnDuty, summary, answers });
   }
+  if (subdivisionSlug === "ocd") {
+    await forwardOcdLogToSheet(env, { discordId, rank, characterName, badgeNumber, hoursOnDuty, summary, answers });
+  }
+
 
   // --- Record it for Command Access (best-effort; never blocks the submitter) ---
 if (env.DB) {
@@ -386,3 +442,4 @@ return jsonResponse({ ok: true }, 200);
 export async function onRequestGet() {
   return jsonResponse({ error: "Method not allowed. Submit logs via POST." }, 405);
 }
+ 

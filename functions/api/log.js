@@ -130,6 +130,64 @@ async function forwardToSheet(env, { badgeNumber, discordId, rank, hoursOnDuty, 
   }
 }
 
+
+// SRT only: look up this subdivision's custom question IDs by label so we
+// can pull the right answers out of the opaque answers object (keyed by
+// numeric question id) and forward them to the Google Sheet.
+async function getSrtQuestionIds(env) {
+  if (!env.DB) return {};
+  try {
+    const { results } = await env.DB.prepare(
+      "SELECT id, label FROM questions WHERE subdivision_slug = 'srt' AND form_type = 'log'"
+    ).all();
+    const map = {};
+    for (const row of results || []) {
+      const label = String(row.label || "").trim().toLowerCase();
+      if (label.startsWith("reason to clock-in")) map.reason = row.id;
+      else if (label.startsWith("did you discharge your weapon")) map.weaponDischarge = row.id;
+      else if (label.startsWith("number of casualties")) map.casualties = row.id;
+      else if (label.startsWith("electronic signature")) map.signature = row.id;
+    }
+    return map;
+  } catch (err) {
+    console.error("Failed to load SRT question ids (non-fatal):", err);
+    return {};
+  }
+}
+
+// Best-effort forward to the Google Sheet via Apps Script for SRT. Mirrors
+// forwardToSheet's RTD behavior above, but targets the SRT web app and
+// secret and pulls its 4 custom-question answers out of the answers
+// object by matching each question's label (since answers is keyed by
+// opaque numeric question ids that can change if questions are re-created).
+async function forwardSrtLogToSheet(env, { discordId, rank, hoursOnDuty, summary, answers }) {
+  if (!env.SRT_SHEET_LOG_WEBHOOK_URL || !env.SRT_SHEET_LOG_SECRET) return;
+  try {
+    const ids = await getSrtQuestionIds(env);
+    const payload = {
+      token: env.SRT_SHEET_LOG_SECRET,
+      discordId,
+      rank,
+      reason: ids.reason ? answers[String(ids.reason)] || "" : "",
+      duration: hoursToHms(hoursOnDuty),
+      summary,
+      weaponDischarge: ids.weaponDischarge ? answers[String(ids.weaponDischarge)] || "" : "",
+      casualties: ids.casualties ? answers[String(ids.casualties)] || "" : "",
+      signature: ids.signature ? answers[String(ids.signature)] || "" : "",
+    };
+
+    const res = await fetch(env.SRT_SHEET_LOG_WEBHOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      console.error("SRT sheet sync rejected the log:", res.status, await res.text().catch(() => ""));
+    }
+  } catch (err) {
+    console.error("Failed to forward SRT log to Google Sheet:", err);
+  }
+}
 export async function onRequestPost(context) {
   const { request, env } = context;
   let data;
@@ -291,6 +349,11 @@ const answers = cleanAnswers(data.answers);
   // --- RTD only: mirror this submission into the Master Roster sheet ----
   if (rtd) {
     await forwardToSheet(env, { badgeNumber, discordId, rank, hoursOnDuty, rtd });
+  }
+
+  // --- SRT only: mirror this submission into the SRT Database sheet ----
+  if (subdivisionSlug === "srt") {
+    await forwardSrtLogToSheet(env, { discordId, rank, hoursOnDuty, summary, answers });
   }
 
   // --- Record it for Command Access (best-effort; never blocks the submitter) ---

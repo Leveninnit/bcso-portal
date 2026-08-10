@@ -2,21 +2,27 @@
  * Cloudflare Pages Function
  * /api/admin/movement-templates
  *
- * Lets any Command Access user (anyone holding the Command Login role
- * — this isn't scoped to a specific subdivision, since deputy movement
- * actions like suspension/investigation apply department-wide) manage
- * a set of reusable "movement" templates. Each template has a name and
- * one or more Discord role IDs to ping; the dashboard's Deputy Movement
- * tab uses these to generate a ready-to-paste Discord message for a
- * given Discord ID and date, for posting into the movements channel.
+ * Lets Command staff manage a set of reusable "movement" templates. Each
+ * template has a name and one or more Discord role IDs to ping; the
+ * dashboard's Deputy Movement tab (department-wide) and each
+ * subdivision's own Movement Templates tab use these to generate a
+ * ready-to-paste Discord message for a given Discord ID and date, for
+ * posting into the movements channel. Every generated message ends with
+ * a blank "| Approved By @ |" for whoever posts it to fill in.
  *
- * GET    -> list all templates
- * POST   { name, roleIds: [".."] }              -> create
- * PUT    { id, name, roleIds: [".."] }          -> update
- * DELETE ?id=..                                  -> remove
+ * A template with no subdivisionSlug is department-wide (visible and
+ * manageable by anyone holding the Command Login role, e.g. the original
+ * Suspending/Investigating templates). A template WITH a subdivisionSlug
+ * only shows up on that subdivision's own tab, and only that
+ * subdivision's command-role holders can manage it.
+ *
+ * GET    [?div=slug]                              -> list templates (global, or global + that subdivision's own)
+ * POST   { name, roleIds: [".."], subdivisionSlug? }  -> create
+ * PUT    { id, name, roleIds: [".."], subdivisionSlug? } -> update
+ * DELETE ?id=..                                    -> remove
  *
  * Requires the D1 database bound as "DB", and the movement_templates
- * table (see schema.sql).
+ * table (see schema.sql / migration-2.sql).
  */
 import { requireSession } from "../../_lib/auth-guard.js";
 
@@ -32,6 +38,7 @@ function parseTemplate(row) {
     name: row.name,
     roleIds: row.role_ids_json ? JSON.parse(row.role_ids_json) : [],
     sortOrder: row.sort_order,
+    subdivisionSlug: row.subdivision_slug || null,
   };
 }
 function validShape(body) {
@@ -48,13 +55,26 @@ function validShape(body) {
 export async function onRequestGet(context) {
   const { request, env } = context;
   if (!env.DB) return jsonResponse({ error: "Database not configured yet." }, 500);
-  const session = await requireSession(request, env);
-  if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
+  const url = new URL(request.url);
+  const div = url.searchParams.get("div");
 
-  const { results } = await env.DB.prepare(
-    "SELECT * FROM movement_templates ORDER BY sort_order ASC, id ASC"
-  ).all();
-  return jsonResponse({ templates: results.map(parseTemplate) }, 200);
+  let templates;
+  if (div) {
+    const session = await requireSession(request, env, div);
+    if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
+    templates = await env.DB.prepare(
+      "SELECT * FROM movement_templates WHERE subdivision_slug IS NULL OR subdivision_slug = ? ORDER BY sort_order ASC, id ASC"
+    )
+      .bind(div)
+      .all();
+  } else {
+    const session = await requireSession(request, env);
+    if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
+    templates = await env.DB.prepare(
+      "SELECT * FROM movement_templates WHERE subdivision_slug IS NULL ORDER BY sort_order ASC, id ASC"
+    ).all();
+  }
+  return jsonResponse({ templates: templates.results.map(parseTemplate) }, 200);
 }
 
 export async function onRequestPost(context) {
@@ -62,16 +82,20 @@ export async function onRequestPost(context) {
   if (!env.DB) return jsonResponse({ error: "Database not configured yet." }, 500);
   const body = await request.json().catch(() => null);
   if (!validShape(body)) return jsonResponse({ error: "Missing or invalid fields." }, 400);
-  const session = await requireSession(request, env);
+  const subdivisionSlug = body.subdivisionSlug ? String(body.subdivisionSlug).trim().slice(0, 30) : null;
+  const session = subdivisionSlug
+    ? await requireSession(request, env, subdivisionSlug)
+    : await requireSession(request, env);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
   await env.DB.prepare(
-    `INSERT INTO movement_templates (name, role_ids_json, sort_order) VALUES (?, ?, ?)`
+    `INSERT INTO movement_templates (name, role_ids_json, sort_order, subdivision_slug) VALUES (?, ?, ?, ?)`
   )
     .bind(
       body.name.trim().slice(0, 100),
       JSON.stringify(body.roleIds.map((r) => String(r).trim())),
-      Number.isFinite(body.sortOrder) ? body.sortOrder : 9999
+      Number.isFinite(body.sortOrder) ? body.sortOrder : 9999,
+      subdivisionSlug
     )
     .run();
 
@@ -85,18 +109,22 @@ export async function onRequestPut(context) {
   if (!body || !body.id || !validShape(body)) {
     return jsonResponse({ error: "Missing or invalid fields." }, 400);
   }
-  const session = await requireSession(request, env);
+  const subdivisionSlug = body.subdivisionSlug ? String(body.subdivisionSlug).trim().slice(0, 30) : null;
+  const session = subdivisionSlug
+    ? await requireSession(request, env, subdivisionSlug)
+    : await requireSession(request, env);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
   await env.DB.prepare(
     `UPDATE movement_templates
-     SET name = ?, role_ids_json = ?, sort_order = ?, updated_at = datetime('now')
+     SET name = ?, role_ids_json = ?, sort_order = ?, subdivision_slug = ?, updated_at = datetime('now')
      WHERE id = ?`
   )
     .bind(
       body.name.trim().slice(0, 100),
       JSON.stringify(body.roleIds.map((r) => String(r).trim())),
       Number.isFinite(body.sortOrder) ? body.sortOrder : 0,
+      subdivisionSlug,
       body.id
     )
     .run();
@@ -110,7 +138,18 @@ export async function onRequestDelete(context) {
   const url = new URL(request.url);
   const id = url.searchParams.get("id");
   if (!id) return jsonResponse({ error: "id is required." }, 400);
-  const session = await requireSession(request, env);
+
+  // Authorize against the template's *actual* stored scope, not whatever
+  // the client claims — a subdivision's command staff should never be
+  // able to delete another subdivision's (or the department-wide) templates.
+  const existing = await env.DB.prepare("SELECT subdivision_slug FROM movement_templates WHERE id = ?")
+    .bind(id)
+    .first();
+  if (!existing) return jsonResponse({ ok: true }, 200); // already gone
+
+  const session = existing.subdivision_slug
+    ? await requireSession(request, env, existing.subdivision_slug)
+    : await requireSession(request, env);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
   await env.DB.prepare("DELETE FROM movement_templates WHERE id = ?").bind(id).run();

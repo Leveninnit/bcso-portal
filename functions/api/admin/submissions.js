@@ -14,6 +14,7 @@
  * Requires the D1 database bound as "DB".
  */
 import { requireSession } from "../../_lib/auth-guard.js";
+import { resolveWebhookUrl, editWebhookMessage } from "../../_lib/discord.js";
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
@@ -76,12 +77,37 @@ export async function onRequestPatch(context) {
   const session = await requireSession(request, env, body.subdivisionSlug);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
+  // Look up which Discord message (if any) this submission came from
+  // *before* updating, so a decision made here on the website can also be
+  // reflected on the original Discord embed (mirrors what happens when a
+  // decision is made the other way, via the Discord Approve/Reject
+  // buttons — see functions/api/discord/interactions.js).
+  const row = await env.DB.prepare(
+    "SELECT form_type, discord_message_id FROM submissions WHERE id = ? AND subdivision_slug = ?"
+  )
+    .bind(body.id, body.subdivisionSlug)
+    .first();
+
+  const decidedByName = session.username || session.discordId;
   await env.DB.prepare(
     `UPDATE submissions SET status = ?, decided_by = ?, decided_at = datetime('now')
      WHERE id = ? AND subdivision_slug = ?`
   )
-    .bind(body.status, session.discordId, body.id, body.subdivisionSlug)
+    .bind(body.status, decidedByName, body.id, body.subdivisionSlug)
     .run();
+
+  if (row && row.discord_message_id) {
+    const webhookUrl = resolveWebhookUrl(env, row.form_type, body.subdivisionSlug);
+    if (webhookUrl) {
+      const verb = body.status === "accepted" ? "✅ **Approved**" : "❌ **Rejected**";
+      context.waitUntil(
+        editWebhookMessage(webhookUrl, row.discord_message_id, {
+          content: `${verb} by **${decidedByName}** on the Command Access dashboard.`,
+          components: [],
+        })
+      );
+    }
+  }
 
   return jsonResponse({ ok: true }, 200);
 }

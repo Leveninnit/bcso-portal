@@ -743,48 +743,79 @@ footer.site-footer a {
    Roster; Character Name and Discord ID shown here are resolved live
    from the Master Roster by badge number (see functions/api/roster.js). */
 
-.roster-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1.25rem;
+.roster-table-wrap {
+  overflow-x: auto;
   margin: 1.5rem 0 2.5rem;
+  border: 1px solid var(--panel-border);
+  border-radius: 10px;
+  background: var(--panel);
 }
 
-.roster-card {
-  text-align: center;
-  padding: 1.5rem 1.25rem;
+.roster-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
 }
 
-.roster-card .badge-tag {
-  display: inline-block;
-  background: rgba(201, 162, 39, 0.12);
+.roster-table thead th {
+  background: rgba(201, 162, 39, 0.1);
   color: var(--gold-bright);
-  border: 1px solid var(--gold);
-  border-radius: 999px;
-  padding: 0.15rem 0.75rem;
-  font-size: 0.75rem;
+  text-align: left;
+  padding: 0.7rem 1.1rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  margin-bottom: 0.6rem;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--gold);
 }
 
-.roster-card h3 {
-  margin: 0.2rem 0 0.3rem;
+.roster-table tbody td {
+  padding: 0.65rem 1.1rem;
+  border-bottom: 1px solid var(--panel-border);
   color: var(--text);
-  font-size: 1.05rem;
+  white-space: nowrap;
 }
 
-.roster-meta {
-  color: var(--muted);
-  font-size: 0.85rem;
-  margin: 0;
+.roster-table tbody tr:last-child td {
+  border-bottom: none;
 }
 
-.roster-notes {
+.roster-table tbody tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.roster-table tbody tr:hover {
+  background: rgba(201, 162, 39, 0.08);
+}
+
+.roster-table td.rt-rank {
+  color: var(--gold-bright);
+  font-weight: 600;
+}
+
+.roster-table td.rt-name {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.roster-table td.rt-discord {
   color: var(--silver-dim);
+  font-family: monospace;
   font-size: 0.82rem;
-  margin: 0.5rem 0 0;
+}
+
+.roster-table td.rt-empty {
+  color: var(--muted);
   font-style: italic;
+  font-weight: 400;
+}
+
+.roster-table td.rt-notes {
+  white-space: normal;
+  color: var(--silver-dim);
+  font-style: italic;
+  min-width: 160px;
 }
 
 /* ---------- Legal pages (Privacy Policy / Terms of Service) ---------- */

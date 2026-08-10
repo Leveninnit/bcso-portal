@@ -21,6 +21,12 @@ Official department documents, kept up to date in Google Docs.
 Each link opens the live document in a new tab so you always
 see the current version.
 </p>
+<div id="roster-section" style="display:none;">
+<h2 class="page-title" style="font-size:1.4rem;">Roster</h2>
+<p class="page-sub" id="roster-subtitle">Current members, kept up to date by command staff.</p>
+<div id="roster-grid" class="roster-grid"></div>
+</div>
+
 <div id="doc-grid" class="sub-grid">
 <!-- populated by JS from assets/documents.js -->
 </div>
@@ -77,6 +83,44 @@ grid.innerHTML = (window.SUBDIVISIONS || []).map((s) => `
 </div>
 `).join("");
 }
+// Roster is scoped to whichever subdivision's Documents page this is —
+// command staff manage entries from Command Access -> that subdivision
+// -> Roster (see assets/command-access.js). Character Name and Discord
+// ID are resolved server-side by badge number against the Master
+// Roster, so they're always current with nothing to keep in sync here.
+async function loadSubdivisionRoster(sub) {
+const section = document.getElementById("roster-section");
+const grid = document.getElementById("roster-grid");
+try {
+const res = await fetch(`/api/roster?div=${encodeURIComponent(sub.slug)}`, { cache: "no-store" });
+const data = await res.json().catch(() => ({}));
+const entries = data.entries || [];
+if (!entries.length) {
+section.style.display = "none";
+return;
+}
+document.getElementById("roster-subtitle").textContent =
+`${entries.length} member${entries.length === 1 ? "" : "s"} on the current ${sub.short} roster, kept up to date by command staff.`;
+grid.innerHTML = entries
+.map(
+(e) => `
+<div class="panel roster-card">
+${e.rank ? `<span class="badge-tag">${escapeHtml(e.rank)}</span>` : ""}
+<h3>${e.characterName ? escapeHtml(e.characterName) : `Badge ${escapeHtml(e.badgeNumber)}`}</h3>
+<p class="roster-meta">
+Badge ${escapeHtml(e.badgeNumber)}
+${e.callsign ? ` &middot; ${escapeHtml(e.callsign)}` : ""}
+</p>
+${e.notes ? `<p class="roster-notes">${escapeHtml(e.notes)}</p>` : ""}
+</div>
+`
+)
+.join("");
+section.style.display = "";
+} catch {
+section.style.display = "none";
+}
+}
 async function renderSubdivisionDocPage(sub) {
 document.getElementById("doc-breadcrumb").innerHTML =
 `<a href="index.html">Home</a> / <a href="documents.html">Master Documents</a> / ${escapeHtml(sub.name)}`;
@@ -85,6 +129,7 @@ document.title = sub.name + " Documents — BCSO";
 document.getElementById("doc-subtitle").textContent =
 "Documents specific to the " + sub.name + ", kept up to date by its own command staff.";
 document.getElementById("sub-doc-section").style.display = "none";
+loadSubdivisionRoster(sub);
 const grid = document.getElementById("doc-grid");
 grid.innerHTML = "Loading…";
 try {

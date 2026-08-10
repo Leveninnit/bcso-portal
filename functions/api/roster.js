@@ -15,10 +15,27 @@
  * status change there shows up on the portal immediately with nothing
  * to keep in sync by hand.
  *
+ * Hours / Activations / Activity are never stored either — they're
+ * computed live from that subdivision's Activity Log submissions
+ * ('log' rows in the submissions table, same source as
+ * functions/api/leaderboard.js), matched to a roster entry by badge
+ * number:
+ *   - hoursLogged / activations: all-time totals (every non-rejected
+ *     log counts, mirroring the leaderboard's counting rule).
+ *   - activityLevel: "Active" / "Semi-Active" / "Inactive", based only
+ *     on THIS CALENDAR MONTH's hours/activations, so it reflects how
+ *     active someone is right now rather than their career total.
+ *     Thresholds (see activityLevelFor below): 3+ hours or 3+
+ *     activations this month = Active, any activity at all =
+ *     Semi-Active, none = Inactive. This is separate from and doesn't
+ *     read from Department Status.
+ *
  * Fails soft: an entry whose badge number isn't found on the Master
  * Roster (not yet added there, typo, etc.) is still returned with
  * whatever was entered, just with an empty name/discordId/status — the
  * roster always renders, it just can't fill in what it doesn't have.
+ * Same for Hours/Activations/Activity if the Activity Log lookup fails
+ * — they fall back to 0/0/Inactive rather than breaking the page.
  *
  * Sort order: if the subdivision has a Rank list configured (Command
  * Access -> that subdivision -> Ranks, also shown on ranks.html), the
@@ -38,6 +55,17 @@ function jsonResponse(body, status) {
 }
 function normalizeRankLabel(value) {
   return (value || "").toString().trim().toLowerCase();
+}
+function hoursFromCore(core) {
+  const hours = Number.isFinite(Number(core.durationSeconds))
+    ? Number(core.durationSeconds) / 3600
+    : Number(core.hoursOnDuty);
+  return Number.isFinite(hours) && hours > 0 ? hours : 0;
+}
+function activityLevelFor(hours, count) {
+  if (hours >= 3 || count >= 3) return "Active";
+  if (hours > 0 || count > 0) return "Semi-Active";
+  return "Inactive";
 }
 
 export async function onRequestGet(context) {
@@ -81,9 +109,53 @@ export async function onRequestGet(context) {
       });
     }
 
+    // Activity Log totals, keyed by badge number, scoped to this
+    // subdivision. allTime feeds the Hours/Activations columns; thisMonth
+    // (current UTC calendar month, matching D1's own clock) feeds the
+    // Activity pill. Non-fatal: an error here just leaves every entry at
+    // 0/0/Inactive instead of breaking the roster.
+    const allTime = new Map();
+    const thisMonth = new Map();
+    try {
+      const { results: logRows } = await env.DB.prepare(
+        "SELECT badge_number, core_fields_json, created_at FROM submissions WHERE subdivision_slug = ? AND form_type = 'log' AND status != 'rejected'"
+      )
+        .bind(div)
+        .all();
+      const currentYm = new Date().toISOString().slice(0, 7);
+      for (const row of logRows || []) {
+        const badge = (row.badge_number || "").trim();
+        if (!badge) continue;
+        let core = {};
+        try {
+          core = JSON.parse(row.core_fields_json || "{}");
+        } catch {
+          core = {};
+        }
+        const hours = hoursFromCore(core);
+
+        if (!allTime.has(badge)) allTime.set(badge, { hours: 0, count: 0 });
+        const t = allTime.get(badge);
+        t.hours += hours;
+        t.count += 1;
+
+        if ((row.created_at || "").slice(0, 7) === currentYm) {
+          if (!thisMonth.has(badge)) thisMonth.set(badge, { hours: 0, count: 0 });
+          const m = thisMonth.get(badge);
+          m.hours += hours;
+          m.count += 1;
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load Activity Log totals (non-fatal):", err);
+    }
+
     const table = await fetchRosterTable(env);
     const entries = rows.map((r) => {
       const person = table ? lookupByBadge(table, r.badge_number) : { found: false };
+      const badge = (r.badge_number || "").trim();
+      const totals = allTime.get(badge) || { hours: 0, count: 0 };
+      const monthTotals = thisMonth.get(badge) || { hours: 0, count: 0 };
       return {
         rank: r.rank,
         badgeNumber: r.badge_number,
@@ -91,6 +163,9 @@ export async function onRequestGet(context) {
         characterName: person.found ? person.name : "",
         discordId: person.found ? person.discordId : "",
         departmentStatus: person.found ? person.departmentStatus : "",
+        hoursLogged: Math.round(totals.hours * 10) / 10,
+        activations: totals.count,
+        activityLevel: activityLevelFor(monthTotals.hours, monthTotals.count),
       };
     });
     return jsonResponse({ entries }, 200);

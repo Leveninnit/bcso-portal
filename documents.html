@@ -85,9 +85,21 @@ grid.innerHTML = (window.SUBDIVISIONS || []).map((s) => `
 }
 // Roster is scoped to whichever subdivision's Documents page this is —
 // command staff manage entries from Command Access -> that subdivision
-// -> Roster (see assets/command-access.js). Character Name and Discord
-// ID are resolved server-side by badge number against the Master
-// Roster, so they're always current with nothing to keep in sync here.
+// -> Roster (see assets/command-access.js). Character Name, Discord ID,
+// and Department Status are resolved server-side by badge number
+// against the Master Roster, so they're always current with nothing to
+// keep in sync here.
+function statusPillClass(status) {
+const s = (status || "").toLowerCase();
+if (/inactive|terminated|resign/.test(s)) return "status-inactive";
+if (/loa|leave/.test(s)) return "status-loa";
+if (/active/.test(s)) return "status-active";
+return "status-unknown";
+}
+function renderStatusCell(status) {
+if (!status) return `<span class="rt-empty">&mdash;</span>`;
+return `<span class="status-pill ${statusPillClass(status)}">${escapeHtml(status)}</span>`;
+}
 async function loadSubdivisionRoster(sub) {
 const section = document.getElementById("roster-section");
 const grid = document.getElementById("roster-grid");
@@ -109,7 +121,7 @@ const rows = entries
 <td>${escapeHtml(e.badgeNumber)}</td>
 <td class="rt-name">${e.characterName ? escapeHtml(e.characterName) : `<span class="rt-empty">Not on Master Roster</span>`}</td>
 <td class="rt-discord">${e.discordId ? escapeHtml(e.discordId) : `<span class="rt-empty">&mdash;</span>`}</td>
-<td>${e.callsign ? escapeHtml(e.callsign) : `<span class="rt-empty">&mdash;</span>`}</td>
+<td>${renderStatusCell(e.departmentStatus)}</td>
 <td class="rt-notes">${e.notes ? escapeHtml(e.notes) : ""}</td>
 </tr>
 `
@@ -124,7 +136,7 @@ grid.innerHTML = `
 <th>Badge #</th>
 <th>Name</th>
 <th>Discord ID</th>
-<th>Callsign</th>
+<th>Department Status</th>
 <th>Notes</th>
 </tr>
 </thead>

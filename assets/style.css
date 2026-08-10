@@ -764,3 +764,201 @@ footer.site-footer a {
 .footer-legal-links {
   font-size: 0.8rem;
 }
+
+/* ==========================================================================
+   Site-wide animation + sound-toggle polish (assets/effects.js)
+   ========================================================================== */
+
+/* Quick top-of-page loading sweep, pure CSS, runs on every page load. */
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 3px;
+  width: 100%;
+  background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+  transform: scaleX(0);
+  transform-origin: left;
+  animation: bcsoLoadBar 0.7s ease-out forwards;
+  z-index: 999;
+  pointer-events: none;
+}
+@keyframes bcsoLoadBar {
+  0% {
+    transform: scaleX(0);
+    opacity: 1;
+  }
+  65% {
+    transform: scaleX(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scaleX(1);
+    opacity: 0;
+  }
+}
+
+/* Whole-page fade-in on load. */
+body {
+  animation: bcsoFadeIn 0.45s ease both;
+}
+@keyframes bcsoFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Hero content enters with a gentle staggered rise. */
+.hero .container > * {
+  animation: bcsoRise 0.65s ease both;
+}
+.hero .container > *:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.hero .container > *:nth-child(2) {
+  animation-delay: 0.13s;
+}
+.hero .container > *:nth-child(3) {
+  animation-delay: 0.21s;
+}
+.hero .container > *:nth-child(4) {
+  animation-delay: 0.29s;
+}
+.hero .container > *:nth-child(5) {
+  animation-delay: 0.37s;
+}
+.hero .container > *:nth-child(6) {
+  animation-delay: 0.45s;
+}
+@keyframes bcsoRise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scroll-reveal: assets/effects.js adds .bcso-reveal at load, then
+   .bcso-in once the element scrolls into view. */
+.bcso-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  transition: opacity 0.55s ease, transform 0.55s ease;
+}
+.bcso-reveal.bcso-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Pop-in for content rendered dynamically after load (e.g. Command
+   Access switching tabs) — already on-screen, so it animates in place
+   instead of waiting to be scrolled to. */
+.bcso-pop {
+  animation: bcsoPop 0.35s ease both;
+}
+@keyframes bcsoPop {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+/* Card hover lift, applied broadly across every card-style component. */
+.value-card,
+.sub-card,
+.honor-card,
+.leadership-card,
+.ca-submission-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+.value-card:hover,
+.sub-card:hover,
+.honor-card:hover,
+.leadership-card:hover,
+.ca-submission-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.4);
+}
+
+/* Buttons get a touch more life on top of the existing lift. */
+.btn:hover {
+  filter: brightness(1.06);
+}
+.btn:active {
+  transform: translateY(1px) scale(0.98);
+}
+
+/* Nav links ease into their hover state instead of snapping. */
+nav.main-nav a {
+  transition: color 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+}
+nav.main-nav a:hover {
+  transform: translateY(-1px);
+}
+
+/* Crest gets a slow, subtle gold breathing glow. */
+.brand img {
+  animation: bcsoCrestGlow 4s ease-in-out infinite;
+}
+@keyframes bcsoCrestGlow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 rgba(201, 162, 39, 0);
+  }
+  50% {
+    box-shadow: 0 0 14px rgba(201, 162, 39, 0.55);
+  }
+}
+
+/* Sound on/off toggle, injected into the header by effects.js. */
+.sound-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  margin-left: 0.5rem;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--silver);
+  font-size: 0.95rem;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.sound-toggle-btn:hover {
+  border-color: var(--gold);
+  box-shadow: 0 0 10px rgba(201, 162, 39, 0.35);
+  transform: translateY(-1px) scale(1.05);
+}
+.sound-toggle-btn.is-muted {
+  color: var(--muted);
+  opacity: 0.7;
+}
+
+/* Respect reduced-motion preferences — keep the effects functional but
+   effectively instant. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  body::before {
+    display: none;
+  }
+}

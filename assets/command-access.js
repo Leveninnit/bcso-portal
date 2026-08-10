@@ -91,6 +91,13 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       const box = el("ca-error");
       box.textContent = messages[error] || `Login error: ${error}`;
       box.style.display = "block";
+      // "no_access" means a real authorization check failed (logged in,
+      // but missing the Command Login role) — play the access-denied
+      // cue. Other errors are just login hiccups, not denials.
+      if (window.BCSOEffects) {
+        if (error === "no_access") window.BCSOEffects.playAuthDenied();
+        else window.BCSOEffects.playError();
+      }
     }
 
     let me;
@@ -109,6 +116,9 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
 
     el("ca-login-gate").style.display = "none";
     el("ca-dashboard").style.display = "block";
+    // Command access just verified successfully — play the
+    // authorization-granted cue.
+    if (window.BCSOEffects) window.BCSOEffects.playAuthGranted();
     el("ca-whoami").textContent = `Logged in as ${me.username}`;
     mySubdivisions = me.subdivisions || [];
 

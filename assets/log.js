@@ -205,6 +205,10 @@
   function showAlert(el, message) {
     if (message) el.textContent = message;
     el.classList.add("show");
+    if (window.BCSOEffects) {
+      if (el.id === "form-success") window.BCSOEffects.playSuccess();
+      else if (el.id === "form-error") window.BCSOEffects.playError();
+    }
   }
   function hideAlert(el) {
     el.classList.remove("show");

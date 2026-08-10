@@ -106,7 +106,11 @@ function tableFromRows(rows, fetchStatus, source) {
   const idxName = findColumn(header, "name");
   const idxBadge = findColumn(header, "badge number", "badge");
   const idxRank = findColumn(header, "rank");
-  return { rows, header, idxDiscordId, idxName, idxBadge, idxRank, fetchStatus, debug: "ok", source };
+  // Department Status column (e.g. "Active" / "LOA" / "Inactive") — shown
+  // on the public Roster next to each member, resolved by badge number
+  // exactly like Name and Discord ID, never typed in by command staff.
+  const idxDeptStatus = findColumn(header, "status");
+  return { rows, header, idxDiscordId, idxName, idxBadge, idxRank, idxDeptStatus, fetchStatus, debug: "ok", source };
 }
 
 // Reads via the Google Sheets API v4 with a plain API key. Works for a
@@ -173,6 +177,7 @@ function personFromRow(table, row) {
     badgeNumber: table.idxBadge !== -1 ? (row[table.idxBadge] || "").trim() : "",
     discordId: table.idxDiscordId !== -1 ? normalizeId(row[table.idxDiscordId]) : "",
     rank: table.idxRank !== -1 ? (row[table.idxRank] || "").trim() : "",
+    departmentStatus: table.idxDeptStatus !== -1 ? (row[table.idxDeptStatus] || "").trim() : "",
   };
 }
 

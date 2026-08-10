@@ -9,6 +9,7 @@ const NAV_LINKS = [
   { href: "applications.html", label: "Applications" },
   { href: "activity-log.html", label: "Activity Log" },
   { href: "documents.html", label: "Documents" },
+  { href: "ranks.html", label: "Ranks" },
   { href: "leaderboards.html", label: "Leaderboards" },
   { href: "command-access.html", label: "Command Access" },
 ];

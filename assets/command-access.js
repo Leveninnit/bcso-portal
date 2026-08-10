@@ -244,15 +244,17 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   }
 
   // ---------------------------------------------------------------------
-  // Ranks — per-subdivision Rank dropdown options for the Activity Log
-  // form (replaces the free-text Rank field once at least one exists).
+  // Ranks — per-subdivision, ordered list of ranks. Powers the Activity
+  // Log form's Rank dropdown, the public ranks.html hierarchy page, and
+  // the sort order of this subdivision's public Roster (highest rank
+  // first) — see functions/api/roster.js and functions/api/rank-options.js.
   // ---------------------------------------------------------------------
   async function renderRanksPanel() {
     const panel = el("ca-panel");
     panel.innerHTML = `
       <div class="panel">
         <p class="ca-section-title">Rank Options</p>
-        <p class="ca-muted">${activeSlug === "rtd" ? "RTD already has its own dedicated Rank dropdown (kept in sync with the Google Sheet) and doesn't use this list." : `Add the ranks deputies can pick from on ${subInfo(activeSlug).short}'s Activity Log form. Leave this empty to keep the original free-text Rank field.`}</p>
+        <p class="ca-muted">${activeSlug === "rtd" ? "RTD already has its own dedicated Rank dropdown (kept in sync with the Google Sheet) and doesn't use this list." : `Add the ranks deputies can pick from on ${subInfo(activeSlug).short}'s Activity Log form. Order matters: arrange these highest to lowest — this same order is shown publicly on the Ranks page and is used to sort ${subInfo(activeSlug).short}'s Roster. Leave this empty to keep the original free-text Rank field (and manual Roster order).`}</p>
         <div id="ca-rank-list">Loading…</div>
         <div class="ca-question-form" id="ca-add-rank-form"></div>
       </div>

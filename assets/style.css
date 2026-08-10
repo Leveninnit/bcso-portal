@@ -833,6 +833,69 @@ footer.site-footer a {
   min-width: 160px;
 }
 
+/* ---------- Ranks page (ranks.html) ----------
+   Rank order per subdivision is managed from Command Access -> that
+   subdivision -> Ranks, and that same order is now used to sort the
+   subdivision's Roster on the Documents page (see functions/api/roster.js). */
+
+.rank-card {
+  align-items: flex-start;
+}
+
+.rank-card-body {
+  width: 100%;
+}
+
+.rank-list {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  width: 100%;
+  counter-reset: rank-counter;
+}
+
+.rank-list li {
+  counter-increment: rank-counter;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--panel-border);
+}
+
+.rank-list li:last-child {
+  border-bottom: none;
+}
+
+.rank-list li::before {
+  content: counter(rank-counter);
+  flex: 0 0 auto;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: rgba(201, 162, 39, 0.12);
+  color: var(--gold-bright);
+  border: 1px solid var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+
+.rank-list .rank-name {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.94rem;
+}
+
+.rank-empty {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.88rem;
+  margin: 0.75rem 0 0;
+}
+
 /* ---------- Legal pages (Privacy Policy / Terms of Service) ---------- */
 
 .legal-page {

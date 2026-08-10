@@ -159,3 +159,150 @@ export async function sendDirectMessage(env, userId, content) {
     console.error("Failed to send Discord DM to", userId, err);
   }
 }
+
+/**
+ * Resolves which Discord webhook URL to use for a given form type +
+ * subdivision, matching the per-subdivision override convention already
+ * used by apply.js and log.js:
+ *   applications  -> DISCORD_WEBHOOK_<SLUG>, falls back to DISCORD_WEBHOOK_URL
+ *   activity logs -> DISCORD_WEBHOOK_<SLUG>_LOG, falls back to DISCORD_WEBHOOK_LOG
+ * Centralized here so admin/submissions.js can re-derive the exact same
+ * webhook a submission was originally posted to, without storing the
+ * webhook's secret token anywhere in the database.
+ */
+export function resolveWebhookUrl(env, formType, subdivisionSlug) {
+  const slug = (subdivisionSlug || "").toUpperCase();
+  if (formType === "log") {
+    return env[`DISCORD_WEBHOOK_${slug}_LOG`] || env.DISCORD_WEBHOOK_LOG || null;
+  }
+  return env[`DISCORD_WEBHOOK_${slug}`] || env.DISCORD_WEBHOOK_URL || null;
+}
+
+/**
+ * Posts to a Discord webhook and asks Discord to hand back the message it
+ * created (?wait=true), so the caller can store its id/channel_id and
+ * later edit it (see editWebhookMessage) once a decision is made. Never
+ * throws — returns { ok: false } on any failure so a message-tracking
+ * problem never blocks the underlying application/log submission.
+ */
+export async function postToWebhookWithId(webhookUrl, payload) {
+  try {
+    const res = await fetch(`${webhookUrl}?wait=true`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) {
+      return { ok: false, status: res.status, body: await res.text().catch(() => "") };
+    }
+    const message = await res.json().catch(() => null);
+    return {
+      ok: true,
+      status: res.status,
+      messageId: message?.id || null,
+      channelId: message?.channel_id || null,
+    };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+/** Splits a webhook URL into its {id, token}, or null if it doesn't match. */
+function parseWebhookUrl(webhookUrl) {
+  const match = /\/webhooks\/(\d+)\/([^/?]+)/.exec(webhookUrl || "");
+  return match ? { id: match[1], token: match[2] } : null;
+}
+
+/**
+ * Edits a message a webhook previously posted — used to update a
+ * submission's embed to show "Decision: Accepted by X" (or Rejected) and
+ * drop the Approve/Reject buttons once someone acts on it, whether that
+ * action happened on the website or on Discord. Best-effort: a failure
+ * here (message deleted, webhook removed, etc.) is logged and swallowed,
+ * never thrown back into the caller.
+ */
+export async function editWebhookMessage(webhookUrl, messageId, body) {
+  const parsed = parseWebhookUrl(webhookUrl);
+  if (!parsed || !messageId) return;
+  try {
+    const res = await fetch(
+      `https://discord.com/api/webhooks/${parsed.id}/${parsed.token}/messages/${messageId}`,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      }
+    );
+    if (!res.ok) {
+      console.error("Failed to edit Discord message:", res.status, await res.text().catch(() => ""));
+    }
+  } catch (err) {
+    console.error("Failed to edit Discord message:", err);
+  }
+}
+
+/**
+ * Builds the Approve/Reject action row shown on a submission's Discord
+ * embed. The custom_id encodes everything the interactions endpoint
+ * needs to act on a click: "bcso_decide:<accept|reject>:<id>:<formType>:<slug>".
+ * These buttons render immediately, but only actually respond once
+ * DISCORD_PUBLIC_KEY is set and the Interactions Endpoint URL is
+ * registered in the Discord Developer Portal (see
+ * functions/api/discord/interactions.js) — until then, clicking one
+ * shows Discord's generic "This interaction failed" message, which is
+ * harmless and doesn't affect the website side of approve/reject at all.
+ */
+export function buildDecisionComponents(submissionId, formType, subdivisionSlug) {
+  const suffix = `${submissionId}:${formType}:${subdivisionSlug}`;
+  return [
+    {
+      type: 1,
+      components: [
+        { type: 2, style: 3, label: "Approve", custom_id: `bcso_decide:accept:${suffix}` },
+        { type: 2, style: 4, label: "Reject", custom_id: `bcso_decide:reject:${suffix}` },
+      ],
+    },
+  ];
+}
+
+function hexToBytes(hex) {
+  const clean = (hex || "").trim();
+  const bytes = new Uint8Array(clean.length / 2);
+  for (let i = 0; i < bytes.length; i++) {
+    bytes[i] = parseInt(clean.substr(i * 2, 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * Verifies an incoming Discord Interactions request's ed25519 signature
+ * using the Workers-native NODE-ED25519 Web Crypto algorithm (built into
+ * the Cloudflare Workers runtime — no extra dependency needed, same
+ * philosophy as session.js's HMAC signing). Returns false — never
+ * throws — on any missing header, missing key, or malformed signature,
+ * so a misconfigured/not-yet-set-up DISCORD_PUBLIC_KEY just means the
+ * endpoint rejects every request instead of crashing.
+ */
+export async function verifyDiscordInteraction(request, rawBody, publicKeyHex) {
+  try {
+    const signature = request.headers.get("X-Signature-Ed25519");
+    const timestamp = request.headers.get("X-Signature-Timestamp");
+    if (!signature || !timestamp || !publicKeyHex) return false;
+    const key = await crypto.subtle.importKey(
+      "raw",
+      hexToBytes(publicKeyHex),
+      { name: "NODE-ED25519", namedCurve: "NODE-ED25519" },
+      false,
+      ["verify"]
+    );
+    return await crypto.subtle.verify(
+      "NODE-ED25519",
+      key,
+      hexToBytes(signature),
+      new TextEncoder().encode(timestamp + rawBody)
+    );
+  } catch (err) {
+    console.error("Discord interaction signature verification failed:", err);
+    return false;
+  }
+}

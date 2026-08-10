@@ -51,6 +51,7 @@
   let movementInnerTabByScope = {}; // "global" | slug -> "generate" | "customize"
   let movementTemplatesCacheByScope = {}; // "global" | slug -> templates array
   let movementApprovedByScope = {}; // "global" | slug -> { mention: "<@id>" | "<@&id>" } | undefined
+  let movementDiscordIdsByScope = {}; // "global" | slug -> string[] of stacked Discord IDs
 let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed once
 
   function el(id) {
@@ -1045,10 +1046,15 @@ function renderDocumentForm(editing) {
     const approved = movementApprovedByScope[key];
     panel.innerHTML = `
       <div class="panel">
-        <p class="ca-muted">Enter the deputy's Discord ID and a date, add any extra text if needed, then copy whichever message applies straight into the movements channel.</p>
+        <p class="ca-muted">Add the deputy's Discord ID and a date, add any extra text if needed, then copy whichever message applies straight into the movements channel.</p>
         <div class="form-row">
-          <label for="ca-mv-discord-id">Discord ID</label>
-          <input type="text" id="ca-mv-discord-id" placeholder="e.g. 123456789012345678" />
+          <label for="ca-mv-discord-id">Discord ID(s)</label>
+          <p class="ca-muted" style="margin:0 0 0.5rem;">Add one or more deputies' Discord IDs — each one gets its own line in the messages below, so you can process several people at once with the same movement.</p>
+          <div class="ca-movement-row" style="margin-bottom:0.35rem;">
+            <input type="text" id="ca-mv-discord-id" placeholder="e.g. 123456789012345678" style="flex:1;min-width:220px;" />
+            <button type="button" class="ca-btn-accept" id="ca-mv-discord-add">Add Discord ID</button>
+          </div>
+          <div id="ca-mv-discord-list" class="ca-mv-chip-list"></div>
         </div>
         <div class="form-row">
           <label for="ca-mv-date">Date</label>
@@ -1075,9 +1081,15 @@ function renderDocumentForm(editing) {
         <div id="ca-mv-templates">Loading…</div>
       </div>
     `;
-    el("ca-mv-discord-id").addEventListener("input", () => renderMovementResults(scope));
     el("ca-mv-date").addEventListener("input", () => renderMovementResults(scope));
     el("ca-mv-notes").addEventListener("input", () => renderMovementResults(scope));
+    el("ca-mv-discord-add").addEventListener("click", () => addMovementDiscordId(scope));
+    el("ca-mv-discord-id").addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        addMovementDiscordId(scope);
+      }
+    });
     el("ca-mv-approved-add").addEventListener("click", () => {
       const id = el("ca-mv-approved-id").value.trim();
       const type = el("ca-mv-approved-type").value;
@@ -1090,7 +1102,59 @@ function renderDocumentForm(editing) {
       renderMovementResults(scope);
     });
     updateApprovedByUI(scope);
+    updateDiscordIdsUI(scope);
     await renderMovementResults(scope);
+  }
+
+  // Adds whatever's in the Discord ID field to this scope's stacked list
+  // (skipping duplicates), clears the field for the next entry, and
+  // refreshes the chip list + generated messages — without rebuilding
+  // the whole Generate panel (which would wipe Date/Notes/Approved By).
+  function addMovementDiscordId(scope) {
+    const key = scope || "global";
+    const input = el("ca-mv-discord-id");
+    const id = input.value.trim();
+    if (!/^\d{5,25}$/.test(id)) {
+      alert("Enter a valid numeric Discord ID.");
+      return;
+    }
+    if (!movementDiscordIdsByScope[key]) movementDiscordIdsByScope[key] = [];
+    if (!movementDiscordIdsByScope[key].includes(id)) {
+      movementDiscordIdsByScope[key].push(id);
+    }
+    input.value = "";
+    input.focus();
+    updateDiscordIdsUI(scope);
+    renderMovementResults(scope);
+  }
+  function removeMovementDiscordId(scope, id) {
+    const key = scope || "global";
+    movementDiscordIdsByScope[key] = (movementDiscordIdsByScope[key] || []).filter((x) => x !== id);
+    updateDiscordIdsUI(scope);
+    renderMovementResults(scope);
+  }
+  // Updates just the stacked-Discord-ID chip list, without rebuilding
+  // the whole Generate panel.
+  function updateDiscordIdsUI(scope) {
+    const key = scope || "global";
+    const ids = movementDiscordIdsByScope[key] || [];
+    const list = el("ca-mv-discord-list");
+    if (!list) return;
+    list.innerHTML = ids.length
+      ? ids
+          .map(
+            (id) => `
+        <span class="ca-id-chip">
+          ${escapeHtml(id)}
+          <button type="button" class="ca-chip-remove" data-remove-discord-id="${escapeHtml(id)}" aria-label="Remove ${escapeHtml(id)}">&times;</button>
+        </span>
+      `
+          )
+          .join("")
+      : `<p class="ca-muted" style="margin:0;">No Discord IDs added yet — messages below won't have anyone to ping until you add at least one.</p>`;
+    list.querySelectorAll("[data-remove-discord-id]").forEach((btn) => {
+      btn.addEventListener("click", () => removeMovementDiscordId(scope, btn.dataset.removeDiscordId));
+    });
   }
 
   // Updates just the Approved By status line + Clear button, without
@@ -1133,7 +1197,7 @@ function renderDocumentForm(editing) {
     if (!box) return;
     const key = scope || "global";
     const templates = await fetchMovementTemplates(scope);
-    const discordId = el("ca-mv-discord-id")?.value.trim();
+    const discordIds = movementDiscordIdsByScope[key] || [];
     const date = el("ca-mv-date")?.value.trim() || todayAmerican();
     const notes = el("ca-mv-notes")?.value.trim();
     const approved = movementApprovedByScope[key];
@@ -1148,19 +1212,25 @@ function renderDocumentForm(editing) {
         // see renderMovementTemplateForm. Fixed segment order after
         // that: the movement itself, then who approved it, then any
         // one-off notes, then the date — the date always goes last,
-        // notes always sit right before it.
+        // notes always sit right before it. Every stacked Discord ID
+        // gets its own line, in the order they were added, so several
+        // deputies can be moved with one copy-paste.
         const pings = t.roleIds.map((r) => (/^\d{5,25}$/.test(r) ? `<@&${r}>` : r));
-        const segments = [`<@${discordId}> → ${pings.join(" & ")}`];
-        if (approved) segments.push(`Approved by: ${approved.mention}`);
-        if (notes) segments.push(notes);
-        segments.push(date);
-        const text = discordId ? segments.join(" | ") : "";
+        const movementPart = pings.join(" & ");
+        const lines = discordIds.map((discordId) => {
+          const segments = [`<@${discordId}> → ${movementPart}`];
+          if (approved) segments.push(`Approved by: ${approved.mention}`);
+          if (notes) segments.push(notes);
+          segments.push(date);
+          return segments.join(" | ");
+        });
+        const text = lines.join("\n");
         const scopeTag = t.subdivisionSlug ? ` <span class="ca-question-meta">(${escapeHtml(t.subdivisionSlug.toUpperCase())})</span>` : "";
         return `
           <div class="ca-movement-row">
             <div class="ca-movement-name">${escapeHtml(t.name)}${scopeTag}</div>
-            <input type="text" class="ca-movement-output" readonly value="${escapeHtml(text)}" placeholder="Enter a Discord ID above" />
-            <button type="button" class="ca-btn-accept" data-copy-for="${t.id}" ${discordId ? "" : "disabled"}>Copy</button>
+            <textarea class="ca-movement-output" readonly rows="${Math.max(1, lines.length)}" placeholder="Add a Discord ID above">${escapeHtml(text)}</textarea>
+            <button type="button" class="ca-btn-accept" data-copy-for="${t.id}" ${discordIds.length ? "" : "disabled"}>Copy</button>
           </div>
         `;
       })

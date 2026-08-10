@@ -280,6 +280,74 @@
      box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
 }
 
+/* Same fix for the Discord ID input on the Deputy Movement Generate
+   tab — also lives inside .ca-movement-row, not .form-row. */
+#ca-mv-discord-id {
+     background: #0c1c13;
+     border: 1px solid var(--panel-border);
+     color: var(--text);
+     border-radius: 8px;
+     padding: 0.5rem 0.8rem;
+     font-size: 0.95rem;
+     font-family: inherit;
+}
+#ca-mv-discord-id:focus {
+     outline: none;
+     border-color: var(--gold);
+     box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
+}
+
+/* Stacked Discord IDs on the Deputy Movement Generate tab — each
+   added ID shows as a removable chip so you can queue up several
+   deputies for the same movement. */
+.ca-mv-chip-list {
+     display: flex;
+     flex-wrap: wrap;
+     gap: 0.4rem;
+     margin-top: 0.15rem;
+}
+.ca-id-chip {
+     display: inline-flex;
+     align-items: center;
+     gap: 0.4rem;
+     background: rgba(201, 162, 39, 0.12);
+     border: 1px solid var(--gold, #c9a227);
+     color: var(--gold-bright, #e6c65c);
+     border-radius: 999px;
+     padding: 0.2rem 0.4rem 0.2rem 0.7rem;
+     font-size: 0.82rem;
+     font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+}
+.ca-chip-remove {
+     display: inline-flex;
+     align-items: center;
+     justify-content: center;
+     width: 18px;
+     height: 18px;
+     border-radius: 50%;
+     border: none;
+     background: rgba(255, 255, 255, 0.12);
+     color: inherit;
+     font-size: 0.95rem;
+     line-height: 1;
+     cursor: pointer;
+     padding: 0;
+     transition: background 0.15s ease;
+}
+.ca-chip-remove:hover {
+     background: rgba(217, 83, 79, 0.5);
+     color: #fff;
+}
+
+/* Movement message output is now a (readonly) textarea so it can hold
+   one line per stacked Discord ID, instead of a single-line input. */
+textarea.ca-movement-output {
+     font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+     line-height: 1.5;
+     resize: vertical;
+     white-space: pre;
+}
+
 /* Leadership tab */
 .ca-leadership-grid {
      display: grid;

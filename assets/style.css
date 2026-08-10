@@ -604,16 +604,26 @@ footer.site-footer a {
   margin: 0.1rem 0 0.6rem;
 }
 
-/* ---------- Patrol photo gallery (homepage) ---------- */
+/* ---------- Patrol photo gallery (homepage) ----------
+   One photo at a time — the frame around the image sizes itself to
+   the image (no fixed-height box, so there's never empty background
+   showing around a photo), with prev/next arrow buttons, dots, and
+   left/right arrow-key support (see assets/home.js). */
 
-.photo-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1.25rem;
+.photo-slideshow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 1rem;
 }
 
-.photo-card {
+.photo-slide-frame {
   margin: 0;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: stretch;
+  max-width: 100%;
   border-radius: var(--radius);
   overflow: hidden;
   border: 1px solid var(--panel-border);
@@ -621,18 +631,63 @@ footer.site-footer a {
   background: var(--panel);
 }
 
-.photo-card img {
+.photo-slide-frame img {
   display: block;
-  width: 100%;
-  height: 280px;
-  object-fit: contain;
-  background: #0c1c13;
+  max-width: 100%;
+  max-height: 60vh;
+  width: auto;
+  height: auto;
+  margin: 0 auto;
 }
 
-.photo-card figcaption {
+.photo-slide-frame figcaption {
   padding: 0.6rem 0.85rem;
   color: var(--muted);
-  font-size: 0.82rem;
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.photo-slide-arrow {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+.photo-slide-arrow:hover {
+  border-color: var(--gold);
+  background: rgba(201, 162, 39, 0.12);
+  color: var(--gold-bright);
+}
+
+.photo-slide-dots {
+  display: flex;
+  justify-content: center;
+  gap: 0.4rem;
+  margin-top: 0.85rem;
+}
+.photo-slide-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: none;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+.photo-slide-dot:hover {
+  background: rgba(201, 162, 39, 0.5);
+}
+.photo-slide-dot.active {
+  background: var(--gold);
+  transform: scale(1.2);
 }
 
 /* ---------- Per-subdivision leadership ("Command Staff") ---------- */

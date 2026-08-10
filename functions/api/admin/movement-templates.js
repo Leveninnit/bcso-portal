@@ -7,8 +7,12 @@
  * dashboard's Deputy Movement tab (department-wide) and each
  * subdivision's own Movement Templates tab use these to generate a
  * ready-to-paste Discord message for a given Discord ID and date, for
- * posting into the movements channel. Every generated message ends with
- * a blank "| Approved By @ |" for whoever posts it to fill in.
+ * posting into the movements channel. The Generate tab also lets
+ * whoever's posting add free-text notes and an "Approved By" mention
+ * (a person's or role's Discord ID, resolved to <@id> or <@&id>) —
+ * both of those are assembled client-side in assets/command-access.js
+ * and are never persisted; this API only stores the reusable
+ * name/role-ping templates themselves.
  *
  * A template with no subdivisionSlug is department-wide (visible and
  * manageable by anyone holding the Command Login role, e.g. the original

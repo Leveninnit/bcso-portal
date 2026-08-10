@@ -190,7 +190,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       <div class="ca-inner-tabs" id="ca-inner-tabs">
         <button type="button" class="ca-inner-tab-btn" data-tab="review">Pending Review</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="customize">Customize Questions</button>
-        ${activeFormType === "log" ? `<button type="button" class="ca-inner-tab-btn" data-tab="ranks">Ranks</button>` : ""}
+        <button type="button" class="ca-inner-tab-btn" data-tab="ranks">Ranks</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="documents">Documents</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="movements">Movement Templates</button>
         ${activeSlug !== "srt" ? `<button type="button" class="ca-inner-tab-btn" data-tab="leadership">Leadership</button>` : ""}
@@ -203,7 +203,6 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       btn.classList.toggle("active", btn.dataset.type === activeFormType);
       btn.addEventListener("click", () => {
         activeFormType = btn.dataset.type;
-        if (activeInnerTab === "ranks" && activeFormType !== "log") activeInnerTab = "review";
         renderSubContent();
       });
     });
@@ -1134,12 +1133,14 @@ function renderDocumentForm(editing) {
     }
     box.innerHTML = templates
       .map((t) => {
-        // Fixed segment order: the movement itself (ping + this
-        // template's fixed wording, if any), then who approved it,
-        // then any one-off notes, then the date — the date always
-        // goes last, notes always sit right before it.
-        const segments = [`<@${discordId}> → ${t.roleIds.map((r) => `<@&${r}>`).join(" & ")}`];
-        if (t.wording) segments.push(t.wording);
+        // Each entry in t.roleIds is either a numeric Discord role ID
+        // (pinged as <@&id>) or a plain word/phrase (included as-is) —
+        // see renderMovementTemplateForm. Fixed segment order after
+        // that: the movement itself, then who approved it, then any
+        // one-off notes, then the date — the date always goes last,
+        // notes always sit right before it.
+        const pings = t.roleIds.map((r) => (/^\d{5,25}$/.test(r) ? `<@&${r}>` : r));
+        const segments = [`<@${discordId}> → ${pings.join(" & ")}`];
         if (approved) segments.push(`Approved by: ${approved.mention}`);
         if (notes) segments.push(notes);
         segments.push(date);
@@ -1204,7 +1205,6 @@ function renderDocumentForm(editing) {
               <strong>${escapeHtml(t.name)}</strong>
               <span class="ca-option-chip">${t.subdivisionSlug ? escapeHtml(t.subdivisionSlug.toUpperCase()) : "Department-wide"}</span>
               <div class="ca-question-meta">${t.roleIds.map((r) => escapeHtml(r)).join(", ")}</div>
-              ${t.wording ? `<div class="ca-question-meta">Wording: ${escapeHtml(t.wording)}</div>` : ""}
             </div>
             <div class="ca-actions">
               <button class="ca-btn-delete" data-mvaction="edit" data-mvid="${t.id}">Edit</button>
@@ -1247,14 +1247,9 @@ function renderDocumentForm(editing) {
         <input type="text" id="ca-mv-t-name" value="${escapeHtml(editing?.name || "")}" placeholder="e.g. Suspending" />
       </div>
       <div class="form-row">
-        <label>Role ID(s) to ping</label>
-        <input type="text" id="ca-mv-t-roles" value="${escapeHtml((editing?.roleIds || []).join(", "))}" placeholder="e.g. 1283145857176440923, 1285706620374093854" />
-        <p class="ca-muted" style="margin-top:0.35rem;">Separate multiple role IDs with commas. In Discord, enable Developer Mode, then right-click a role → Copy Role ID.</p>
-      </div>
-      <div class="form-row">
-        <label>Wording (optional)</label>
-        <input type="text" id="ca-mv-t-wording" value="${escapeHtml(editing?.wording || "")}" placeholder="e.g. is being suspended pending investigation" maxlength="300" />
-        <p class="ca-muted" style="margin-top:0.35rem;">Included automatically in every message generated from this template, right after the role pings.</p>
+        <label>Role ID(s) or words to include</label>
+        <input type="text" id="ca-mv-t-roles" value="${escapeHtml((editing?.roleIds || []).join(", "))}" placeholder="e.g. 1283145857176440923, is being suspended pending investigation, 1285706620374093854" />
+        <p class="ca-muted" style="margin-top:0.35rem;">Separate entries with commas. Numeric Discord role IDs get pinged (In Discord, enable Developer Mode, then right-click a role → Copy Role ID) — anything else is included as plain text, in the order you list it.</p>
       </div>
       <div class="ca-actions">
         <button class="ca-btn-accept" id="ca-mv-t-save">${isEdit ? "Save changes" : "Add template"}</button>
@@ -1270,16 +1265,15 @@ function renderDocumentForm(editing) {
         .value.split(",")
         .map((r) => r.trim())
         .filter(Boolean);
-      const wording = el("ca-mv-t-wording").value.trim();
       if (!name) {
         alert("Please enter a template name.");
         return;
       }
-      if (!roleIds.length || !roleIds.every((r) => /^\d{5,25}$/.test(r))) {
-        alert("Enter one or more valid numeric Discord role IDs, separated by commas.");
+      if (!roleIds.length) {
+        alert("Enter at least one role ID or word, separated by commas.");
         return;
       }
-      const payload = { name, roleIds, wording };
+      const payload = { name, roleIds };
       if (scope) payload.subdivisionSlug = scope;
       if (isEdit) {
         await fetch("/api/admin/movement-templates", {

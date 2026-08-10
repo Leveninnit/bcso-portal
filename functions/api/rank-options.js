@@ -3,12 +3,19 @@
  * GET /api/rank-options?div=slug
  *
  * Public, read-only: returns the list of Rank options command staff have
- * configured for a subdivision's Activity Log form (see
- * functions/api/admin/rank-options.js), so log.html can render a
- * dropdown instead of a free-text Rank field. Returns an empty list
- * (never an error) if nothing's configured yet, if the database isn't
- * set up, or if anything goes wrong — log.html falls back to the
- * original free-text field whenever this list is empty, so nothing ever
+ * configured for a subdivision (see functions/api/admin/rank-options.js),
+ * in order. Used by:
+ *   - log.html          - renders a dropdown instead of a free-text Rank
+ *                          field once at least one option exists.
+ *   - ranks.html         - shows the subdivision's rank hierarchy publicly,
+ *                          highest to lowest, in this same order.
+ * The Roster on each subdivision's Documents page is also sorted using
+ * this same order (see functions/api/roster.js), so this list is now the
+ * single source of truth for "what order do ranks go in" everywhere.
+ *
+ * Returns an empty list (never an error) if nothing's configured yet, if
+ * the database isn't set up, or if anything goes wrong — every consumer
+ * falls back gracefully whenever this list is empty, so nothing ever
  * breaks for a subdivision that hasn't set this up.
  */
 function jsonResponse(body, status) {

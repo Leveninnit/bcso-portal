@@ -738,6 +738,55 @@ footer.site-footer a {
   font-size: 0.82rem;
 }
 
+/* ---------- Subdivision Roster (documents.html?div=slug) ----------
+   Command staff manage entries from Command Access -> a subdivision ->
+   Roster; Character Name and Discord ID shown here are resolved live
+   from the Master Roster by badge number (see functions/api/roster.js). */
+
+.roster-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1.25rem;
+  margin: 1.5rem 0 2.5rem;
+}
+
+.roster-card {
+  text-align: center;
+  padding: 1.5rem 1.25rem;
+}
+
+.roster-card .badge-tag {
+  display: inline-block;
+  background: rgba(201, 162, 39, 0.12);
+  color: var(--gold-bright);
+  border: 1px solid var(--gold);
+  border-radius: 999px;
+  padding: 0.15rem 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.6rem;
+}
+
+.roster-card h3 {
+  margin: 0.2rem 0 0.3rem;
+  color: var(--text);
+  font-size: 1.05rem;
+}
+
+.roster-meta {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 0;
+}
+
+.roster-notes {
+  color: var(--silver-dim);
+  font-size: 0.82rem;
+  margin: 0.5rem 0 0;
+  font-style: italic;
+}
+
 /* ---------- Legal pages (Privacy Policy / Terms of Service) ---------- */
 
 .legal-page {

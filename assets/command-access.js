@@ -202,6 +202,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         <button type="button" class="ca-inner-tab-btn" data-tab="review">Pending Review</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="customize">Customize Questions</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="ranks">Ranks</button>
+        <button type="button" class="ca-inner-tab-btn" data-tab="roster">Roster</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="documents">Documents</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="movements">Movement Templates</button>
         ${activeSlug !== "srt" ? `<button type="button" class="ca-inner-tab-btn" data-tab="leadership">Leadership</button>` : ""}
@@ -231,6 +232,8 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       renderCustomizePanel();
     } else if (activeInnerTab === "ranks") {
       renderRanksPanel();
+    } else if (activeInnerTab === "roster") {
+      renderRosterPanel();
     } else if (activeInnerTab === "movements") {
       renderMovementTab(el("ca-panel"), activeSlug);
     } else if (activeInnerTab === "leadership") {
@@ -345,6 +348,190 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       });
       renderRankForm();
       loadRankOptions();
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // Roster — every subdivision's own member roster (including SRT),
+  // shown publicly on that subdivision's Documents page. Each entry is
+  // just a Rank + Badge Number (+ optional Callsign/Notes) — Character
+  // Name and Discord ID are resolved live from the Master Roster sheet
+  // by badge number when the public roster is loaded (see
+  // functions/api/roster.js), so nothing here goes stale on its own.
+  // ---------------------------------------------------------------------
+  let rosterRankOptionsCache = {}; // slug -> string[] (for the Rank autocomplete)
+
+  async function renderRosterPanel() {
+    const panel = el("ca-panel");
+    panel.innerHTML = `
+      <div class="panel">
+        <p class="ca-section-title">${subInfo(activeSlug).short} Roster</p>
+        <p class="ca-muted">Shown publicly on the ${subInfo(activeSlug).short} Documents page. Add each member's Rank and Badge Number — their Character Name and Discord ID are pulled automatically from the Master Roster by badge number, so you never have to type or update those here. Reorder with the arrows, exactly how you want the roster to read top to bottom.</p>
+        <div id="ca-roster-list">Loading…</div>
+        <div class="ca-question-form" id="ca-add-roster-form"></div>
+      </div>
+    `;
+    renderRosterForm(null);
+    await loadRosterEntries();
+  }
+
+  async function loadRankOptionsForDatalist(slug) {
+    if (rosterRankOptionsCache[slug]) return rosterRankOptionsCache[slug];
+    try {
+      const res = await fetch(`/api/admin/rank-options?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+      const data = await res.json();
+      const labels = (data.options || []).map((o) => o.label);
+      rosterRankOptionsCache[slug] = labels;
+      return labels;
+    } catch {
+      return [];
+    }
+  }
+
+  async function loadRosterEntries() {
+    const list = el("ca-roster-list");
+    const slug = activeSlug;
+    try {
+      const res = await fetch(`/api/admin/roster?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+      const data = await res.json();
+      const entries = data.entries || [];
+      if (!entries.length) {
+        list.innerHTML = `<p class="ca-muted">No roster entries yet — add the first one below.</p>`;
+        return;
+      }
+      list.innerHTML = entries
+        .map(
+          (e, i) => `
+          <div class="ca-question-row" data-entry-id="${e.id}">
+            <div>
+              <strong>${escapeHtml(e.rank || "(no rank set)")}</strong> &middot; Badge ${escapeHtml(e.badgeNumber)}
+              ${e.callsign ? `<div class="ca-question-meta">Callsign: ${escapeHtml(e.callsign)}</div>` : ""}
+              ${e.notes ? `<div class="ca-question-meta">${escapeHtml(e.notes)}</div>` : ""}
+            </div>
+            <div class="ca-actions">
+              <button class="ca-btn-delete" data-rsaction="up" data-rsid="${e.id}" ${i === 0 ? "disabled" : ""}>↑</button>
+              <button class="ca-btn-delete" data-rsaction="down" data-rsid="${e.id}" ${i === entries.length - 1 ? "disabled" : ""}>↓</button>
+              <button class="ca-btn-accept" data-rsaction="edit" data-rsid="${e.id}">Edit</button>
+              <button class="ca-btn-reject" data-rsaction="delete" data-rsid="${e.id}">Delete</button>
+            </div>
+          </div>
+        `
+        )
+        .join("");
+      list.querySelectorAll("[data-rsaction]").forEach((btn) => {
+        btn.addEventListener("click", () => handleRosterAction(btn.dataset.rsaction, entries, btn.dataset.rsid));
+      });
+    } catch {
+      list.innerHTML = `<p class="ca-muted">Couldn't load the roster. Try refreshing.</p>`;
+    }
+  }
+
+  async function handleRosterAction(action, entries, id) {
+    const e = entries.find((x) => String(x.id) === String(id));
+    if (!e) return;
+    if (action === "delete") {
+      if (!confirm(`Remove Badge ${e.badgeNumber} from the roster?`)) return;
+      await fetch(`/api/admin/roster?id=${e.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+      loadRosterEntries();
+      return;
+    }
+    if (action === "edit") {
+      renderRosterForm(e);
+      el("ca-add-roster-form").scrollIntoView({ behavior: "smooth", block: "center" });
+      return;
+    }
+    const idx = entries.findIndex((x) => String(x.id) === String(id));
+    const swapIdx = action === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= entries.length) return;
+    const other = entries[swapIdx];
+    await Promise.all([putRosterEntry({ ...e, sortOrder: other.sortOrder }), putRosterEntry({ ...other, sortOrder: e.sortOrder })]);
+    loadRosterEntries();
+  }
+
+  function putRosterEntry(e) {
+    return fetch("/api/admin/roster", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: e.id,
+        subdivisionSlug: activeSlug,
+        rank: e.rank,
+        badgeNumber: e.badgeNumber,
+        callsign: e.callsign,
+        notes: e.notes,
+        sortOrder: e.sortOrder,
+      }),
+    });
+  }
+
+  // `editing` is null when adding a new entry, or an existing entry
+  // object when editing one in place.
+  async function renderRosterForm(editing) {
+    const formBox = el("ca-add-roster-form");
+    const rankOptions = await loadRankOptionsForDatalist(activeSlug);
+    formBox.innerHTML = `
+      <h4>${editing ? `Edit Badge ${escapeHtml(editing.badgeNumber)}` : "Add a roster entry"}</h4>
+      <div class="form-row">
+        <label>Rank</label>
+        <input type="text" id="ca-rs-rank" list="ca-rs-rank-options" placeholder="e.g. Deputy Sheriff II" value="${editing ? escapeHtml(editing.rank) : ""}" />
+        <datalist id="ca-rs-rank-options">
+          ${rankOptions.map((r) => `<option value="${escapeHtml(r)}"></option>`).join("")}
+        </datalist>
+        <span class="hint">Type any rank/title — pick one of ${subInfo(activeSlug).short}'s configured ranks from the suggestions, or enter something custom.</span>
+      </div>
+      <div class="form-row">
+        <label>Badge Number *</label>
+        <input type="text" id="ca-rs-badge" placeholder="e.g. 1042" value="${editing ? escapeHtml(editing.badgeNumber) : ""}" />
+        <span class="hint">Must match their Badge Number on the Master Roster exactly — that's how their Name and Discord ID get filled in automatically.</span>
+      </div>
+      <div class="form-row">
+        <label>Callsign (optional)</label>
+        <input type="text" id="ca-rs-callsign" placeholder="e.g. OCD-04" value="${editing ? escapeHtml(editing.callsign) : ""}" />
+      </div>
+      <div class="form-row">
+        <label>Notes (optional)</label>
+        <input type="text" id="ca-rs-notes" placeholder="e.g. FTO, On LOA, Probationary — anything you want shown" value="${editing ? escapeHtml(editing.notes) : ""}" />
+      </div>
+      <div class="ca-actions">
+        <button class="ca-btn-accept" id="ca-rs-save">${editing ? "Save changes" : "Add to roster"}</button>
+        ${editing ? `<button class="ca-btn-delete" id="ca-rs-cancel">Cancel</button>` : ""}
+        <span class="ca-muted" id="ca-rs-status"></span>
+      </div>
+    `;
+    if (editing && el("ca-rs-cancel")) {
+      el("ca-rs-cancel").addEventListener("click", () => renderRosterForm(null));
+    }
+    el("ca-rs-save").addEventListener("click", async () => {
+      const badgeNumber = el("ca-rs-badge").value.trim();
+      if (!badgeNumber) {
+        alert("Please enter a Badge Number.");
+        return;
+      }
+      const payload = {
+        subdivisionSlug: activeSlug,
+        rank: el("ca-rs-rank").value.trim(),
+        badgeNumber,
+        callsign: el("ca-rs-callsign").value.trim(),
+        notes: el("ca-rs-notes").value.trim(),
+      };
+      const statusEl = el("ca-rs-status");
+      statusEl.textContent = "Saving…";
+      try {
+        const res = await fetch("/api/admin/roster", {
+          method: editing ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(editing ? { ...payload, id: editing.id, sortOrder: editing.sortOrder } : payload),
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data && data.ok) {
+          renderRosterForm(null);
+          loadRosterEntries();
+        } else {
+          statusEl.textContent = (data && data.error) || "Failed to save.";
+        }
+      } catch {
+        statusEl.textContent = "Failed to save. Check your connection.";
+      }
     });
   }
 

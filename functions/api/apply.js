@@ -32,7 +32,15 @@
  * applicant's response, and any one DM failing (closed DMs, bot not
  * sharing a server with them, etc.) never affects the others.
  */
-import { SUBDIVISION_COMMAND_ROLES, getGuildMembersWithRole, sendDirectMessage } from "../_lib/discord.js";
+import {
+  SUBDIVISION_COMMAND_ROLES,
+  getGuildMembersWithRole,
+  sendDirectMessage,
+  resolveWebhookUrl,
+  postToWebhookWithId,
+  editWebhookMessage,
+  buildDecisionComponents,
+} from "../_lib/discord.js";
 
 const FIELD_LIMITS = {
   characterName: 100,
@@ -131,10 +139,9 @@ export async function onRequestPost(context) {
     return jsonResponse({ error: "Please write at least 20 characters for 'why do you want to join'." }, 400);
   }
   // --- Resolve which webhook to send to ---------------------------------
-  const perSubKey = `DISCORD_WEBHOOK_${subdivisionSlug.toUpperCase()}`;
-  const webhookUrl = env[perSubKey] || env.DISCORD_WEBHOOK_URL;
+  const webhookUrl = resolveWebhookUrl(env, "application", subdivisionSlug);
   if (!webhookUrl) {
-    console.error("No Discord webhook configured (checked", perSubKey, "and DISCORD_WEBHOOK_URL)");
+    console.error("No Discord webhook configured for applications for subdivision", subdivisionSlug);
     return jsonResponse(
       { error: "Applications are temporarily unavailable. Please try again later or contact command staff." },
       500
@@ -186,28 +193,18 @@ export async function onRequestPost(context) {
     embeds: [embed],
     allowed_mentions: allowedMentions,
   };
-  try {
-    const discordRes = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(discordPayload),
-    });
-    if (!discordRes.ok) {
-      const body = await discordRes.text().catch(() => "");
-      console.error("Discord webhook rejected the message:", discordRes.status, body);
-      return jsonResponse({ error: "Discord rejected the application. Please try again or contact command staff." }, 502);
-    }
-  } catch (err) {
-    console.error("Failed to reach Discord webhook:", err);
-    return jsonResponse({ error: "Could not reach Discord right now. Please try again in a moment." }, 502);
+  const postResult = await postToWebhookWithId(webhookUrl, discordPayload);
+  if (!postResult.ok) {
+    console.error("Discord webhook rejected the message:", postResult.status, postResult.body || postResult.error);
+    return jsonResponse({ error: "Discord rejected the application. Please try again or contact command staff." }, 502);
   }
   // --- Record it for Command Access (best-effort; never blocks the applicant) ---
   let submissionId = null;
   if (env.DB) {
     try {
       const insertResult = await env.DB.prepare(
-        `INSERT INTO submissions (subdivision_slug, form_type, discord_id, character_name, badge_number, rank, core_fields_json, answers_json)
-         VALUES (?, 'application', ?, ?, ?, ?, ?, ?)`
+        `INSERT INTO submissions (subdivision_slug, form_type, discord_id, character_name, badge_number, rank, core_fields_json, answers_json, discord_message_id, discord_channel_id)
+         VALUES (?, 'application', ?, ?, ?, ?, ?, ?, ?, ?)`
       )
         .bind(
           subdivisionSlug,
@@ -216,13 +213,23 @@ export async function onRequestPost(context) {
           badgeNumber,
           rank,
           JSON.stringify({ whyJoin, experience }),
-          JSON.stringify(answers)
+          JSON.stringify(answers),
+          postResult.messageId,
+          postResult.channelId
         )
         .run();
       submissionId = insertResult?.meta?.last_row_id ?? null;
     } catch (err) {
       console.error("Failed to record application in D1 (non-fatal):", err);
     }
+  }
+  // --- Attach Approve/Reject buttons now that we know the submission id ---
+  if (submissionId && postResult.messageId) {
+    context.waitUntil(
+      editWebhookMessage(webhookUrl, postResult.messageId, {
+        components: buildDecisionComponents(submissionId, "application", subdivisionSlug),
+      })
+    );
   }
   // --- DM the subdivision's command staff with a direct link (best-effort) ---
   if (submissionId && commandRoleId) {

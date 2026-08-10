@@ -3,13 +3,22 @@
  * POST /api/log
  *
  * Receives a subdivision activity log entry from log.html, validates +
- * sanitizes it, and forwards a formatted embed to Discord (unchanged
- * behavior for every subdivision). New: for RTD specifically, also
- * forwards the submission to a Google Apps Script Web App that appends
- * a row to the Master Roster's 'RTD | Activation Logs' tab — the same
- * tab the "BCSO | RTD | Activation Form" Google Form writes to — so
- * portal submissions show up in the roster's hour/contribution totals
- * exactly like a Form submission would.
+ * sanitizes it, and forwards a formatted embed to Discord — pinging that
+ * subdivision's command role (see SUBDIVISION_COMMAND_ROLES) the same way
+ * apply.js already does for applications, plus an Approve/Reject button
+ * pair so command staff can act on it straight from Discord (requires
+ * DISCORD_PUBLIC_KEY to be set — see functions/api/discord/interactions.js).
+ * For RTD specifically, also forwards the submission to a Google Apps
+ * Script Web App that appends a row to the Master Roster's 'RTD |
+ * Activation Logs' tab — the same tab the "BCSO | RTD | Activation Form"
+ * Google Form writes to — so portal submissions show up in the roster's
+ * hour/contribution totals exactly like a Form submission would.
+ *
+ * Duration is collected as separate hours/minutes/seconds fields (not a
+ * single decimal-hours number) so shifts can be logged down to the
+ * second. Internally this is still also expressed as decimal hours
+ * (`hoursOnDuty`) for backward compatibility with the existing Google
+ * Sheet sync functions below, which expect that shape.
  *
  * New Cloudflare environment variables (Settings -> Environment
  * variables, Encrypt both):
@@ -19,6 +28,14 @@
  * If either is missing, the sheet-write step is silently skipped and
  * everything else (Discord notifications) keeps working as before.
  */
+import {
+  SUBDIVISION_COMMAND_ROLES,
+  resolveWebhookUrl,
+  postToWebhookWithId,
+  editWebhookMessage,
+  buildDecisionComponents,
+} from "../_lib/discord.js";
+
 const FIELD_LIMITS = {
   characterName: 100,
   discordId: 100,
@@ -49,6 +66,23 @@ function hoursToHms(hoursDecimal) {
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
   return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+// Validates and clamps a duration component (hours/minutes/seconds) sent
+// from the form. Returns null (not 0) for anything missing/invalid so the
+// caller can tell "not provided / bad input" apart from an honest 0.
+function toNonNegInt(value, max) {
+  if (value === undefined || value === null || value === "") return null;
+  const n = Math.trunc(Number(value));
+  if (!Number.isFinite(n) || n < 0 || n > max) return null;
+  return n;
+}
+
+// "2h 30m 15s" — the human-readable duration shown on the Discord embed
+// and in Command Access, built directly from the submitted H/M/S so there
+// is no floating-point round-tripping through decimal hours.
+function formatDuration(h, m, s) {
+  return `${h}h ${String(m).padStart(2, "0")}m ${String(s).padStart(2, "0")}s`;
 }
 
 function cleanAnswers(answers) {
@@ -129,7 +163,6 @@ async function forwardToSheet(env, { badgeNumber, discordId, rank, hoursOnDuty, 
     console.error("Failed to forward log to Google Sheet:", err);
   }
 }
-
 
 // SRT only: look up this subdivision's custom question IDs by label so we
 // can pull the right answers out of the opaque answers object (keyed by
@@ -264,7 +297,6 @@ export async function onRequestPost(context) {
     "discordId",
     "badgeNumber",
     "rank",
-    "hoursOnDuty",
     "summary",
     "subdivisionSlug",
     "subdivisionName",
@@ -281,11 +313,21 @@ export async function onRequestPost(context) {
   const summary = clean(data.summary, FIELD_LIMITS.summary);
   const subdivisionName = clean(data.subdivisionName, FIELD_LIMITS.subdivisionName);
   const subdivisionSlug = clean(data.subdivisionSlug, 30).toLowerCase().replace(/[^a-z0-9_-]/g, "");
-const answers = cleanAnswers(data.answers);
-  const hoursOnDuty = Number(data.hoursOnDuty);
-  if (!Number.isFinite(hoursOnDuty) || hoursOnDuty <= 0 || hoursOnDuty > 24) {
-    return jsonResponse({ error: "Hours on duty must be a number between 0 and 24." }, 400);
+  const answers = cleanAnswers(data.answers);
+
+  const durationHours = toNonNegInt(data.durationHours, 24);
+  const durationMinutes = toNonNegInt(data.durationMinutes, 59);
+  const durationSeconds = toNonNegInt(data.durationSeconds, 59);
+  if (durationHours === null || durationMinutes === null || durationSeconds === null) {
+    return jsonResponse({ error: "Please enter a valid duration (hours, minutes, seconds)." }, 400);
   }
+  const totalSeconds = durationHours * 3600 + durationMinutes * 60 + durationSeconds;
+  if (totalSeconds <= 0 || totalSeconds > 24 * 3600) {
+    return jsonResponse({ error: "Duration must be between 1 second and 24 hours." }, 400);
+  }
+  const hoursOnDuty = totalSeconds / 3600; // decimal, kept for the sheet-sync functions below
+  const durationDisplay = formatDuration(durationHours, durationMinutes, durationSeconds);
+
   if (summary.length < 10) {
     return jsonResponse({ error: "Please write at least 10 characters describing your shift." }, 400);
   }
@@ -314,10 +356,9 @@ const answers = cleanAnswers(data.answers);
   }
 
   // --- Resolve which webhook to send to ---------------------------------
-  const perSubKey = `DISCORD_WEBHOOK_${subdivisionSlug.toUpperCase()}_LOG`;
-  const webhookUrl = env[perSubKey] || env.DISCORD_WEBHOOK_LOG;
+  const webhookUrl = resolveWebhookUrl(env, "log", subdivisionSlug);
   if (!webhookUrl) {
-    console.error("No Discord webhook configured for activity logs (checked", perSubKey, "and DISCORD_WEBHOOK_LOG)");
+    console.error("No Discord webhook configured for activity logs for subdivision", subdivisionSlug);
     return jsonResponse(
       { error: "Activity logging is temporarily unavailable. Please try again later or contact command staff on Discord." },
       500
@@ -333,7 +374,7 @@ const answers = cleanAnswers(data.answers);
     { name: "Badge Number", value: badgeNumber, inline: true },
     { name: "Rank", value: rank, inline: true },
     { name: "Subdivision", value: subdivisionName, inline: true },
-    { name: "Hours on Duty", value: String(hoursOnDuty), inline: true },
+    { name: "Duration", value: durationDisplay, inline: true },
   ];
   if (rtd) {
     if (rtd.role === "assist") {
@@ -374,28 +415,24 @@ const answers = cleanAnswers(data.answers);
     footer: { text: "Blaine County Sheriff's Office • Activity Logs" },
     timestamp: new Date().toISOString(),
   };
+
+  // Ping the subdivision's command role, same as applications already do.
+  // Real pings only happen for this one explicitly-allowed role ID —
+  // nothing a user types in a text field can trigger @everyone or any
+  // other ping.
+  const commandRoleId = SUBDIVISION_COMMAND_ROLES[subdivisionSlug];
   const discordPayload = {
     username: "BCSO Activity Logs",
     avatar_url: crestUrl,
+    content: commandRoleId ? `<@&${commandRoleId}>` : undefined,
     embeds: [embed],
-    // Belt-and-braces: even if someone smuggles "@everyone" into a text
-    // field, Discord will render it as plain text, never as a real ping.
-    allowed_mentions: { parse: [] },
+    allowed_mentions: { parse: [], roles: commandRoleId ? [commandRoleId] : [] },
   };
-  try {
-    const discordRes = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(discordPayload),
-    });
-    if (!discordRes.ok) {
-      const body = await discordRes.text().catch(() => "");
-      console.error("Discord webhook rejected the log:", discordRes.status, body);
-      return jsonResponse({ error: "Discord rejected the log entry. Please try again or contact command staff." }, 502);
-    }
-  } catch (err) {
-    console.error("Failed to reach Discord webhook:", err);
-    return jsonResponse({ error: "Could not reach Discord right now. Please try again in a moment." }, 502);
+
+  const postResult = await postToWebhookWithId(webhookUrl, discordPayload);
+  if (!postResult.ok) {
+    console.error("Discord webhook rejected the log:", postResult.status, postResult.body || postResult.error);
+    return jsonResponse({ error: "Discord rejected the log entry. Please try again or contact command staff." }, 502);
   }
 
   // --- RTD only: mirror this submission into the Master Roster sheet ----
@@ -411,30 +448,42 @@ const answers = cleanAnswers(data.answers);
     await forwardOcdLogToSheet(env, { discordId, rank, characterName, badgeNumber, hoursOnDuty, summary, answers });
   }
 
-
   // --- Record it for Command Access (best-effort; never blocks the submitter) ---
-if (env.DB) {
-  try {
-    await env.DB.prepare(
-      `INSERT INTO submissions (subdivision_slug, form_type, discord_id, character_name, badge_number, rank, core_fields_json, answers_json)
-       VALUES (?, 'log', ?, ?, ?, ?, ?, ?)`
-    )
-      .bind(
-        subdivisionSlug,
-        discordId,
-        characterName,
-        badgeNumber,
-        rank,
-        JSON.stringify({ hoursOnDuty, summary, rtd }),
-        JSON.stringify(answers)
+  let submissionId = null;
+  if (env.DB) {
+    try {
+      const insertResult = await env.DB.prepare(
+        `INSERT INTO submissions (subdivision_slug, form_type, discord_id, character_name, badge_number, rank, core_fields_json, answers_json, discord_message_id, discord_channel_id)
+         VALUES (?, 'log', ?, ?, ?, ?, ?, ?, ?, ?)`
       )
-      .run();
-  } catch (err) {
-    console.error("Failed to record activity log in D1 (non-fatal):", err);
+        .bind(
+          subdivisionSlug,
+          discordId,
+          characterName,
+          badgeNumber,
+          rank,
+          JSON.stringify({ durationSeconds: totalSeconds, durationDisplay, summary, rtd }),
+          JSON.stringify(answers),
+          postResult.messageId,
+          postResult.channelId
+        )
+        .run();
+      submissionId = insertResult?.meta?.last_row_id ?? null;
+    } catch (err) {
+      console.error("Failed to record activity log in D1 (non-fatal):", err);
+    }
   }
-}
 
-return jsonResponse({ ok: true }, 200);
+  // --- Attach Approve/Reject buttons now that we know the submission id ---
+  if (submissionId && postResult.messageId) {
+    context.waitUntil(
+      editWebhookMessage(webhookUrl, postResult.messageId, {
+        components: buildDecisionComponents(submissionId, "log", subdivisionSlug),
+      })
+    );
+  }
+
+  return jsonResponse({ ok: true }, 200);
 }
 
 // Any method other than POST gets a clean 405 instead of falling through
@@ -442,4 +491,3 @@ return jsonResponse({ ok: true }, 200);
 export async function onRequestGet() {
   return jsonResponse({ error: "Method not allowed. Submit logs via POST." }, 405);
 }
- 

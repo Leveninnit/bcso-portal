@@ -105,7 +105,12 @@ export async function onRequestGet(context) {
       } catch {
         core = {};
       }
-      const hours = Number(core.hoursOnDuty);
+      // Newer submissions store an exact durationSeconds (see
+      // functions/api/log.js); older ones only have a decimal hoursOnDuty.
+      // Support both so the leaderboard keeps working across the change.
+      const hours = Number.isFinite(Number(core.durationSeconds))
+        ? Number(core.durationSeconds) / 3600
+        : Number(core.hoursOnDuty);
       const validHours = Number.isFinite(hours) && hours > 0 ? hours : 0;
       const personKey = row.discord_id || row.badge_number || row.character_name || "unknown";
 

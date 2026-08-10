@@ -1,15 +1,13 @@
 -- BCSO Portal — Migration 3 (Cloudflare D1 / SQLite)
 --
--- Adds an optional fixed "wording" to Deputy Movement templates, e.g. a
--- template named "Suspending" could carry the wording "is being
--- suspended pending investigation" — that text is included automatically
--- in every message generated from that template, on top of whatever
--- notes/Approved By the person generating the message adds themselves.
+-- NOT NEEDED — skip this file.
 --
--- Run this ONCE against your existing D1 database (Cloudflare dashboard
--- -> Workers & Pages -> your D1 database -> Console, paste this whole
--- file and execute) — the same way you ran schema.sql and migration-2.sql.
--- If you haven't run migration-2.sql yet, run that one first; this file
--- only adds one column to a table migration-2.sql already touched.
-
-ALTER TABLE movement_templates ADD COLUMN wording TEXT;
+-- This originally added a separate "wording" column to Deputy Movement
+-- templates. That approach was replaced: the existing "Role ID(s) to
+-- ping" field on a template now accepts a mix of numeric Discord role
+-- IDs (pinged) AND plain words/phrases (included as literal text) in
+-- the same comma-separated list, so no extra column is needed.
+--
+-- If you already ran this file before reading this note, no harm done
+-- — it just added one unused column (movement_templates.wording) that
+-- nothing reads or writes anymore. If you haven't run it, don't bother.

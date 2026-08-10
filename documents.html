@@ -113,6 +113,12 @@ return "status-inactive";
 function renderActivityCell(level) {
 return `<span class="status-pill ${activityPillClass(level)}">${escapeHtml(level || "Inactive")}</span>`;
 }
+// Tracks the in-flight Roster fetch so "View Roster" (see
+// renderSubdivisionDocPage below) can wait for it before scrolling —
+// without this, clicking the button while the roster is still loading
+// (or before it's decided there's nothing to show) would try to jump to
+// a section that's still display:none and silently do nothing.
+let rosterLoadPromise = null;
 async function loadSubdivisionRoster(sub) {
 const section = document.getElementById("roster-section");
 const grid = document.getElementById("roster-grid");
@@ -168,6 +174,23 @@ section.style.display = "";
 section.style.display = "none";
 }
 }
+// Scrolls to the Roster table once it's actually loaded and visible —
+// used by the "View Roster" document card instead of a plain #anchor
+// link, which would just silently no-op if clicked before the async
+// roster fetch above finishes (or land under the sticky header without
+// the scroll-margin-top on #roster-section in assets/style.css).
+async function scrollToRoster(event) {
+if (event) event.preventDefault();
+if (rosterLoadPromise) {
+try {
+await rosterLoadPromise;
+} catch {}
+}
+const section = document.getElementById("roster-section");
+if (section && section.style.display !== "none") {
+section.scrollIntoView({ behavior: "smooth", block: "start" });
+}
+}
 async function renderSubdivisionDocPage(sub) {
 document.getElementById("doc-breadcrumb").innerHTML =
 `<a href="index.html">Home</a> / <a href="documents.html">Master Documents</a> / ${escapeHtml(sub.name)}`;
@@ -176,7 +199,7 @@ document.title = sub.name + " Documents — BCSO";
 document.getElementById("doc-subtitle").textContent =
 "Documents specific to the " + sub.name + ", kept up to date by its own command staff.";
 document.getElementById("sub-doc-section").style.display = "none";
-loadSubdivisionRoster(sub);
+rosterLoadPromise = loadSubdivisionRoster(sub);
 const grid = document.getElementById("doc-grid");
 grid.innerHTML = "Loading…";
 try {
@@ -201,7 +224,7 @@ return `
 <div class="panel sub-card">
 <h3>${escapeHtml(d.name)}</h3>
 <p>${escapeHtml(d.description)}</p>
-<a class="btn btn-gold" href="#roster-section">View Roster</a>
+<a class="btn btn-gold" href="#roster-section" onclick="scrollToRoster(event)">View Roster</a>
 </div>
 `;
 }

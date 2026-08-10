@@ -24,7 +24,7 @@
       discordId: "Discord ID",
       badgeNumber: "Current Badge Number",
       rank: "Current Rank",
-      hoursOnDuty: "Hours on Duty",
+      hoursOnDuty: "Duration on Duty",
       summary: "Shift Summary",
     },
   };
@@ -39,7 +39,7 @@
     rank: "Rank field",
     whyJoin: '"Why join" question',
     experience: '"Experience" question',
-    hoursOnDuty: '"Hours on Duty" question',
+    hoursOnDuty: '"Duration on Duty" question',
     summary: '"Summary" question',
   };
 
@@ -48,8 +48,8 @@
   let activeFormType = "application"; // "application" | "log"
   let activeInnerTab = "review"; // "review" | "customize"
   let questionLabelCache = {}; // `${slug}:${type}` -> { [questionId]: label }
-  let movementInnerTab = "generate"; // "generate" | "customize"
-  let movementTemplatesCache = null;
+  let movementInnerTabByScope = {}; // "global" | slug -> "generate" | "customize"
+  let movementTemplatesCacheByScope = {}; // "global" | slug -> templates array
 let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed once
 
   function el(id) {
@@ -164,12 +164,13 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     const container = el("ca-sub-content");
 
     if (activeSlug === MOVEMENT_TAB_SLUG) {
-      renderMovementTab(container);
+      renderMovementTab(container, null);
       return;
     }
 
     const info = subInfo(activeSlug);
     const showApplications = !info.logOnly;
+    if (!showApplications) activeFormType = "log";
 
     const innerTabsHtml = `
       <div class="ca-inner-tabs" id="ca-form-type-tabs" style="display:${activeInnerTab === "documents" ? "none" : ""};">
@@ -179,18 +180,20 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       <div class="ca-inner-tabs" id="ca-inner-tabs">
         <button type="button" class="ca-inner-tab-btn" data-tab="review">Pending Review</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="customize">Customize Questions</button>
+        ${activeFormType === "log" ? `<button type="button" class="ca-inner-tab-btn" data-tab="ranks">Ranks</button>` : ""}
         <button type="button" class="ca-inner-tab-btn" data-tab="documents">Documents</button>
+        <button type="button" class="ca-inner-tab-btn" data-tab="movements">Movement Templates</button>
+        ${activeSlug !== "srt" ? `<button type="button" class="ca-inner-tab-btn" data-tab="leadership">Leadership</button>` : ""}
       </div>
       <div id="ca-panel"></div>
     `;
     container.innerHTML = innerTabsHtml;
 
-    if (!showApplications) activeFormType = "log";
-
     container.querySelectorAll("#ca-form-type-tabs button").forEach((btn) => {
       btn.classList.toggle("active", btn.dataset.type === activeFormType);
       btn.addEventListener("click", () => {
         activeFormType = btn.dataset.type;
+        if (activeInnerTab === "ranks" && activeFormType !== "log") activeInnerTab = "review";
         renderSubContent();
       });
     });
@@ -206,9 +209,123 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       renderReviewPanel();
     } else if (activeInnerTab === "customize") {
       renderCustomizePanel();
+    } else if (activeInnerTab === "ranks") {
+      renderRanksPanel();
+    } else if (activeInnerTab === "movements") {
+      renderMovementTab(el("ca-panel"), activeSlug);
+    } else if (activeInnerTab === "leadership") {
+      renderLeadershipPanel();
     } else {
       renderDocumentsPanel();
     }
+  }
+
+  // ---------------------------------------------------------------------
+  // Ranks — per-subdivision Rank dropdown options for the Activity Log
+  // form (replaces the free-text Rank field once at least one exists).
+  // ---------------------------------------------------------------------
+  async function renderRanksPanel() {
+    const panel = el("ca-panel");
+    panel.innerHTML = `
+      <div class="panel">
+        <p class="ca-section-title">Rank Options</p>
+        <p class="ca-muted">${activeSlug === "rtd" ? "RTD already has its own dedicated Rank dropdown (kept in sync with the Google Sheet) and doesn't use this list." : `Add the ranks deputies can pick from on ${subInfo(activeSlug).short}'s Activity Log form. Leave this empty to keep the original free-text Rank field.`}</p>
+        <div id="ca-rank-list">Loading…</div>
+        <div class="ca-question-form" id="ca-add-rank-form"></div>
+      </div>
+    `;
+    if (activeSlug === "rtd") return;
+    renderRankForm();
+    await loadRankOptions();
+  }
+
+  async function loadRankOptions() {
+    const list = el("ca-rank-list");
+    const slug = activeSlug;
+    try {
+      const res = await fetch(`/api/admin/rank-options?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+      const data = await res.json();
+      const options = data.options || [];
+      if (!options.length) {
+        list.innerHTML = `<p class="ca-muted">No rank options yet — the form is using the original free-text field.</p>`;
+        return;
+      }
+      list.innerHTML = options
+        .map(
+          (o, i) => `
+          <div class="ca-question-row">
+            <div><strong>${escapeHtml(o.label)}</strong></div>
+            <div class="ca-actions">
+              <button class="ca-btn-delete" data-rkaction="up" data-rkid="${o.id}" ${i === 0 ? "disabled" : ""}>↑</button>
+              <button class="ca-btn-delete" data-rkaction="down" data-rkid="${o.id}" ${i === options.length - 1 ? "disabled" : ""}>↓</button>
+              <button class="ca-btn-reject" data-rkaction="delete" data-rkid="${o.id}">Delete</button>
+            </div>
+          </div>
+        `
+        )
+        .join("");
+      list.querySelectorAll("[data-rkaction]").forEach((btn) => {
+        btn.addEventListener("click", () => handleRankAction(btn.dataset.rkaction, options, btn.dataset.rkid));
+      });
+    } catch {
+      list.innerHTML = `<p class="ca-muted">Couldn't load rank options. Try refreshing.</p>`;
+    }
+  }
+
+  async function handleRankAction(action, options, id) {
+    const o = options.find((x) => String(x.id) === String(id));
+    if (!o) return;
+    if (action === "delete") {
+      if (!confirm(`Delete rank "${o.label}"?`)) return;
+      await fetch(`/api/admin/rank-options?id=${o.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+      loadRankOptions();
+      return;
+    }
+    const idx = options.findIndex((x) => String(x.id) === String(id));
+    const swapIdx = action === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= options.length) return;
+    const other = options[swapIdx];
+    await Promise.all([
+      putRankOption({ ...o, sortOrder: other.sortOrder }),
+      putRankOption({ ...other, sortOrder: o.sortOrder }),
+    ]);
+    loadRankOptions();
+  }
+
+  function putRankOption(o) {
+    return fetch("/api/admin/rank-options", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: o.id, subdivisionSlug: activeSlug, label: o.label, sortOrder: o.sortOrder }),
+    });
+  }
+
+  function renderRankForm() {
+    const formBox = el("ca-add-rank-form");
+    formBox.innerHTML = `
+      <h4>Add a rank</h4>
+      <div class="form-row">
+        <label>Rank name</label>
+        <input type="text" id="ca-rk-label" placeholder="e.g. Deputy Sheriff II" />
+      </div>
+      <div class="ca-actions">
+        <button class="ca-btn-accept" id="ca-rk-save">Add rank</button>
+      </div>
+    `;
+    el("ca-rk-save").addEventListener("click", async () => {
+      const label = el("ca-rk-label").value.trim();
+      if (!label) {
+        alert("Please enter a rank name.");
+        return;
+      }
+      await fetch("/api/admin/rank-options", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subdivisionSlug: activeSlug, label, sortOrder: 9999 }),
+      });
+      renderRankForm();
+      loadRankOptions();
+    });
   }
 
   // ---------------------------------------------------------------------
@@ -294,7 +411,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
             ["Experience", core.experience],
           ]
         : [
-            ["Hours on duty", core.hoursOnDuty],
+            ["Duration", core.durationDisplay || core.hoursOnDuty],
             ["Summary", core.summary],
           ];
     const answerEntries = Object.entries(s.answers || {}).map(([qid, val]) => [labels[qid] || `Question ${qid}`, val]);
@@ -312,10 +429,15 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
            <button class="ca-btn-reject" data-action="reject" data-id="${s.id}">Reject</button>
            <button class="ca-btn-delete" data-action="delete" data-id="${s.id}">Delete</button>`
         : `<button class="ca-btn-delete" data-action="delete" data-id="${s.id}">Delete</button>`;
+    const decidedNote =
+      s.status !== "pending" && s.decidedBy
+        ? `<div class="ca-question-meta">${s.status === "accepted" ? "Approved" : "Rejected"} by ${escapeHtml(s.decidedBy)}</div>`
+        : "";
     return `
       <div class="ca-submission-card" data-subid="${s.id}">
         <strong>${escapeHtml(s.characterName)}</strong>
         <span class="ca-status ${s.status}">${s.status}</span>
+        ${decidedNote}
         <div class="ca-submission-fields">
           ${allFields
             .filter(([, v]) => v !== undefined && v !== null && v !== "")
@@ -753,9 +875,108 @@ function renderDocumentForm(editing) {
 }
 
 // ---------------------------------------------------------------------
+  // Leadership — per-subdivision "Meet the Team", shown on that
+  // subdivision's Apply page (e.g. OCD-01/02/03). Not available for SRT
+  // (no tab is rendered for it — see renderSubContent).
+  // ---------------------------------------------------------------------
+  const LEADERSHIP_MAX_SLOTS = { teu: 3, ocd: 3, rtd: 3, nred: 1 };
+
+  async function renderLeadershipPanel() {
+    const panel = el("ca-panel");
+    const maxSlots = LEADERSHIP_MAX_SLOTS[activeSlug];
+    if (!maxSlots) {
+      panel.innerHTML = `<div class="panel"><p class="ca-muted">This subdivision doesn't have a leadership directory.</p></div>`;
+      return;
+    }
+    panel.innerHTML = `
+      <div class="panel">
+        <p class="ca-section-title">${subInfo(activeSlug).short} Command Staff</p>
+        <p class="ca-muted">Shown on the ${subInfo(activeSlug).short} Apply page as ${subInfo(activeSlug).short}-01${maxSlots > 1 ? `, -02, up to -0${maxSlots}` : ""}. Leave a slot's name blank to hide it.</p>
+        <div id="ca-leadership-grid" class="ca-leadership-grid">Loading…</div>
+      </div>
+    `;
+    try {
+      const res = await fetch(`/api/admin/leadership?div=${encodeURIComponent(activeSlug)}`, { cache: "no-store" });
+      const data = await res.json();
+      renderLeadershipSlots(data.leadership || [], maxSlots);
+    } catch {
+      el("ca-leadership-grid").innerHTML = `<p class="ca-muted">Couldn't load. Try refreshing.</p>`;
+    }
+  }
+
+  function renderLeadershipSlots(rows, maxSlots) {
+    const grid = el("ca-leadership-grid");
+    const bySlot = new Map(rows.map((r) => [r.slot_number, r]));
+    const cards = [];
+    for (let slot = 1; slot <= maxSlots; slot++) {
+      const r = bySlot.get(slot) || {};
+      cards.push(`
+        <div class="ca-question-form" data-slot="${slot}">
+          <h4>${subInfo(activeSlug).short}-0${slot}</h4>
+          <div class="form-row">
+            <label>Character Name</label>
+            <input type="text" class="ca-ld-name" value="${escapeHtml(r.character_name)}" maxlength="100" />
+          </div>
+          <div class="form-row">
+            <label>Rank / Title</label>
+            <input type="text" class="ca-ld-rank" value="${escapeHtml(r.rank_title)}" maxlength="100" />
+          </div>
+          <div class="form-row">
+            <label>Bio</label>
+            <textarea class="ca-ld-bio" maxlength="1000" rows="2">${escapeHtml(r.bio)}</textarea>
+          </div>
+          <div class="form-row">
+            <label>Photo URL</label>
+            <input type="text" class="ca-ld-photo" value="${escapeHtml(r.photo_url)}" maxlength="500" placeholder="https://…" />
+          </div>
+          <div class="ca-actions">
+            <button class="ca-btn-accept ca-ld-save">Save ${subInfo(activeSlug).short}-0${slot}</button>
+            <span class="ca-ld-status ca-muted"></span>
+          </div>
+        </div>
+      `);
+    }
+    grid.innerHTML = cards.join("");
+    grid.querySelectorAll("[data-slot]").forEach((card) => {
+      const slot = Number(card.dataset.slot);
+      card.querySelector(".ca-ld-save").addEventListener("click", async () => {
+        const statusEl = card.querySelector(".ca-ld-status");
+        statusEl.textContent = "Saving…";
+        const payload = {
+          subdivisionSlug: activeSlug,
+          slotNumber: slot,
+          characterName: card.querySelector(".ca-ld-name").value.trim(),
+          rankTitle: card.querySelector(".ca-ld-rank").value.trim(),
+          bio: card.querySelector(".ca-ld-bio").value.trim(),
+          photoUrl: card.querySelector(".ca-ld-photo").value.trim(),
+        };
+        try {
+          const res = await fetch("/api/admin/leadership", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          });
+          const data = await res.json().catch(() => null);
+          statusEl.textContent = res.ok && data && data.ok ? "Saved." : (data && data.error) || "Failed to save.";
+        } catch {
+          statusEl.textContent = "Failed to save. Check your connection.";
+        }
+        setTimeout(() => (statusEl.textContent = ""), 3000);
+      });
+    });
+  }
+
+// ---------------------------------------------------------------------
   // Deputy Movement — department-wide copy-paste generator + templates
   // ---------------------------------------------------------------------
-  function renderMovementTab(container) {
+  // `scope` is null for the department-wide "Deputy Movement" tab, or a
+  // subdivision slug for that subdivision's own "Movement Templates" tab
+  // (Command Access -> that subdivision -> Movement Templates). Both
+  // reuse the exact same Generate/Customize UI — the only difference is
+  // which templates the API returns and which get created.
+  function renderMovementTab(container, scope) {
+    const key = scope || "global";
+    if (!movementInnerTabByScope[key]) movementInnerTabByScope[key] = "generate";
     container.innerHTML = `
       <div class="ca-inner-tabs" id="ca-movement-tabs">
         <button type="button" class="ca-inner-tab-btn" data-tab="generate">Generate</button>
@@ -764,16 +985,16 @@ function renderDocumentForm(editing) {
       <div id="ca-movement-panel"></div>
     `;
     container.querySelectorAll("#ca-movement-tabs button").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.tab === movementInnerTab);
+      btn.classList.toggle("active", btn.dataset.tab === movementInnerTabByScope[key]);
       btn.addEventListener("click", () => {
-        movementInnerTab = btn.dataset.tab;
-        renderMovementTab(container);
+        movementInnerTabByScope[key] = btn.dataset.tab;
+        renderMovementTab(container, scope);
       });
     });
-    if (movementInnerTab === "generate") {
-      renderMovementGenerate();
+    if (movementInnerTabByScope[key] === "generate") {
+      renderMovementGenerate(scope);
     } else {
-      renderMovementCustomize();
+      renderMovementCustomize(scope);
     }
   }
 
@@ -785,23 +1006,25 @@ function renderDocumentForm(editing) {
     return `${mm}/${dd}/${yy}`;
   }
 
-  async function fetchMovementTemplates(force) {
-    if (movementTemplatesCache && !force) return movementTemplatesCache;
+  async function fetchMovementTemplates(scope, force) {
+    const key = scope || "global";
+    if (movementTemplatesCacheByScope[key] && !force) return movementTemplatesCacheByScope[key];
     try {
-      const res = await fetch("/api/admin/movement-templates", { cache: "no-store" });
+      const qs = scope ? `?div=${encodeURIComponent(scope)}` : "";
+      const res = await fetch(`/api/admin/movement-templates${qs}`, { cache: "no-store" });
       const data = await res.json();
-      movementTemplatesCache = data.templates || [];
+      movementTemplatesCacheByScope[key] = data.templates || [];
     } catch {
-      movementTemplatesCache = [];
+      movementTemplatesCacheByScope[key] = [];
     }
-    return movementTemplatesCache;
+    return movementTemplatesCacheByScope[key];
   }
 
-  async function renderMovementGenerate() {
+  async function renderMovementGenerate(scope) {
     const panel = el("ca-movement-panel");
     panel.innerHTML = `
       <div class="panel">
-        <p class="ca-muted">Enter the deputy's Discord ID and a date, then copy whichever message applies straight into the movements channel.</p>
+        <p class="ca-muted">Enter the deputy's Discord ID and a date, then copy whichever message applies straight into the movements channel. Every generated message ends with a blank "Approved By" line for whoever posts it to fill in.</p>
         <div class="form-row">
           <label for="ca-mv-discord-id">Discord ID</label>
           <input type="text" id="ca-mv-discord-id" placeholder="e.g. 123456789012345678" />
@@ -813,15 +1036,15 @@ function renderDocumentForm(editing) {
         <div id="ca-mv-templates">Loading…</div>
       </div>
     `;
-    el("ca-mv-discord-id").addEventListener("input", renderMovementResults);
-    el("ca-mv-date").addEventListener("input", renderMovementResults);
-    await renderMovementResults();
+    el("ca-mv-discord-id").addEventListener("input", () => renderMovementResults(scope));
+    el("ca-mv-date").addEventListener("input", () => renderMovementResults(scope));
+    await renderMovementResults(scope);
   }
 
-  async function renderMovementResults() {
+  async function renderMovementResults(scope) {
     const box = el("ca-mv-templates");
     if (!box) return;
-    const templates = await fetchMovementTemplates();
+    const templates = await fetchMovementTemplates(scope);
     const discordId = el("ca-mv-discord-id")?.value.trim();
     const date = el("ca-mv-date")?.value.trim() || todayAmerican();
     if (!templates.length) {
@@ -831,11 +1054,12 @@ function renderDocumentForm(editing) {
     box.innerHTML = templates
       .map((t) => {
         const text = discordId
-          ? `<@${discordId}> → ${t.roleIds.map((r) => `<@&${r}>`).join(" & ")} | ${date}`
+          ? `<@${discordId}> → ${t.roleIds.map((r) => `<@&${r}>`).join(" & ")} | ${date} | Approved By @ |`
           : "";
+        const scopeTag = t.subdivisionSlug ? ` <span class="ca-question-meta">(${escapeHtml(t.subdivisionSlug.toUpperCase())})</span>` : "";
         return `
           <div class="ca-movement-row">
-            <div class="ca-movement-name">${escapeHtml(t.name)}</div>
+            <div class="ca-movement-name">${escapeHtml(t.name)}${scopeTag}</div>
             <input type="text" class="ca-movement-output" readonly value="${escapeHtml(text)}" placeholder="Enter a Discord ID above" />
             <button type="button" class="ca-btn-accept" data-copy-for="${t.id}" ${discordId ? "" : "disabled"}>Copy</button>
           </div>
@@ -859,23 +1083,27 @@ function renderDocumentForm(editing) {
     });
   }
 
-  async function renderMovementCustomize() {
+  async function renderMovementCustomize(scope) {
     const panel = el("ca-movement-panel");
     panel.innerHTML = `
       <div class="panel">
-        <p class="ca-muted">Add, edit, or remove the templates available on the Generate tab. Each template pings one or more Discord roles — anyone with the Command Login role can manage these.</p>
+        <p class="ca-muted">${
+          scope
+            ? `Templates you add here only show up on ${escapeHtml(subInfo(scope).short)}'s own tabs, alongside the department-wide templates below. Anyone with ${escapeHtml(subInfo(scope).short)} command access can manage these.`
+            : "Add, edit, or remove the department-wide templates available on the Generate tab. Each template pings one or more Discord roles — anyone with the Command Login role can manage these."
+        }</p>
         <div id="ca-mv-template-list">Loading…</div>
         <div class="ca-question-form" id="ca-mv-template-form"></div>
       </div>
     `;
-    renderMovementTemplateForm(null);
-    await loadMovementTemplateList();
+    renderMovementTemplateForm(null, scope);
+    await loadMovementTemplateList(scope);
   }
 
-  async function loadMovementTemplateList() {
+  async function loadMovementTemplateList(scope) {
     const list = el("ca-mv-template-list");
     try {
-      const templates = await fetchMovementTemplates(true);
+      const templates = await fetchMovementTemplates(scope, true);
       if (!templates.length) {
         list.innerHTML = `<p class="ca-muted">No templates yet.</p>`;
         return;
@@ -886,6 +1114,7 @@ function renderDocumentForm(editing) {
           <div class="ca-question-row">
             <div>
               <strong>${escapeHtml(t.name)}</strong>
+              <span class="ca-option-chip">${t.subdivisionSlug ? escapeHtml(t.subdivisionSlug.toUpperCase()) : "Department-wide"}</span>
               <div class="ca-question-meta">${t.roleIds.map((r) => escapeHtml(r)).join(", ")}</div>
             </div>
             <div class="ca-actions">
@@ -897,29 +1126,29 @@ function renderDocumentForm(editing) {
         )
         .join("");
       list.querySelectorAll("[data-mvaction]").forEach((btn) => {
-        btn.addEventListener("click", () => handleMovementTemplateAction(btn.dataset.mvaction, templates, btn.dataset.mvid));
+        btn.addEventListener("click", () => handleMovementTemplateAction(btn.dataset.mvaction, templates, btn.dataset.mvid, scope));
       });
     } catch {
       list.innerHTML = `<p class="ca-muted">Couldn't load templates. Try refreshing.</p>`;
     }
   }
 
-  async function handleMovementTemplateAction(action, templates, id) {
+  async function handleMovementTemplateAction(action, templates, id, scope) {
     const t = templates.find((x) => String(x.id) === String(id));
     if (!t) return;
     if (action === "delete") {
       if (!confirm(`Delete template "${t.name}"? This can't be undone.`)) return;
-      await fetch(`/api/admin/movement-templates?id=${t.id}`, { method: "DELETE" });
-      movementTemplatesCache = null;
-      await loadMovementTemplateList();
+      await fetch(`/api/admin/movement-templates?id=${t.id}${scope ? `&div=${encodeURIComponent(scope)}` : ""}`, { method: "DELETE" });
+      movementTemplatesCacheByScope = {};
+      await loadMovementTemplateList(scope);
       return;
     }
     if (action === "edit") {
-      renderMovementTemplateForm(t);
+      renderMovementTemplateForm(t, scope);
     }
   }
 
-  function renderMovementTemplateForm(editing) {
+  function renderMovementTemplateForm(editing, scope) {
     const formBox = el("ca-mv-template-form");
     const isEdit = !!editing;
     formBox.innerHTML = `
@@ -939,7 +1168,7 @@ function renderDocumentForm(editing) {
       </div>
     `;
     if (isEdit) {
-      el("ca-mv-t-cancel").addEventListener("click", () => renderMovementTemplateForm(null));
+      el("ca-mv-t-cancel").addEventListener("click", () => renderMovementTemplateForm(null, scope));
     }
     el("ca-mv-t-save").addEventListener("click", async () => {
       const name = el("ca-mv-t-name").value.trim();
@@ -956,6 +1185,7 @@ function renderDocumentForm(editing) {
         return;
       }
       const payload = { name, roleIds };
+      if (scope) payload.subdivisionSlug = scope;
       if (isEdit) {
         await fetch("/api/admin/movement-templates", {
           method: "PUT",
@@ -969,9 +1199,9 @@ function renderDocumentForm(editing) {
           body: JSON.stringify({ ...payload, sortOrder: 9999 }),
         });
       }
-      movementTemplatesCache = null;
-      renderMovementTemplateForm(null);
-      await loadMovementTemplateList();
+      movementTemplatesCacheByScope = {};
+      renderMovementTemplateForm(null, scope);
+      await loadMovementTemplateList(scope);
     });
   }
 

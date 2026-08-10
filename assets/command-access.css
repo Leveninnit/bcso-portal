@@ -257,3 +257,22 @@
      color: rgba(255, 255, 255, 0.35);
      font-family: inherit;
 }
+
+/* Leadership tab */
+.ca-leadership-grid {
+     display: grid;
+     grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+     gap: 1.25rem;
+     margin-top: 1rem;
+}
+.ca-leadership-grid .ca-question-form {
+     margin-top: 0;
+}
+.ca-leadership-grid h4 {
+     margin: 0 0 1rem;
+     color: var(--gold-bright, #c9a227);
+     font-size: 1rem;
+}
+.ca-ld-status {
+     font-size: 0.85rem;
+}

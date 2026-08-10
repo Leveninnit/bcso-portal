@@ -43,6 +43,9 @@ function renderFooter() {
     <div class="container">
       <span>&copy; ${year} Blaine County Sheriff's Office &mdash; Est. 1908</span>
       <span>Respectful &middot; Professional &middot; Ethical &middot; Service to All</span>
+      <span class="footer-legal-links">
+        <a href="privacy-policy.html">Privacy Policy</a> &middot; <a href="terms-of-service.html">Terms of Service</a>
+      </span>
     </div>
   </footer>`;
 }

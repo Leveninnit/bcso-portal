@@ -80,6 +80,39 @@
     });
     return answers;
   }
+  // Shows the subdivision's Command Staff directory (e.g. OCD-01/02/03),
+  // configured by that subdivision's own command staff on the Command
+  // Access dashboard. SRT never has one (no public applications). Hides
+  // itself entirely if nothing's been filled in yet.
+  async function renderLeadership(slug) {
+    const panel = document.getElementById("leadership-panel");
+    const grid = document.getElementById("leadership-grid");
+    if (!panel || !slug || slug === "general" || slug === "srt") return;
+    try {
+      const res = await fetch(`/api/leadership?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      const staff = (data.leadership || []).filter((s) => s.character_name);
+      if (!staff.length) return;
+      const sub = findSubdivision(slug);
+      const short = sub ? sub.short : slug.toUpperCase();
+      grid.innerHTML = staff
+        .map(
+          (s) => `
+          <div class="leadership-card">
+            ${s.photo_url ? `<img src="${escapeHtml(s.photo_url)}" alt="${escapeHtml(s.character_name)}" />` : `<div class="leadership-photo-placeholder">${escapeHtml(short)}-0${s.slot_number}</div>`}
+            <div class="leadership-name">${escapeHtml(s.character_name)}</div>
+            <div class="leadership-rank">${escapeHtml(s.rank_title || `${short}-0${s.slot_number}`)}</div>
+            ${s.bio ? `<div class="leadership-bio">${escapeHtml(s.bio)}</div>` : ""}
+          </div>
+        `
+        )
+        .join("");
+      panel.style.display = "block";
+    } catch {
+      // Leadership listing is a nice-to-have — ignore failures quietly.
+    }
+  }
+
   function initPage() {
     const slug = getQueryParam("div");
     const sub = findSubdivision(slug);
@@ -112,6 +145,7 @@
     const slugValue = document.getElementById("subdivisionSlug").value;
     renderCustomQuestions(slugValue);
     applyFieldLabelOverrides(slugValue);
+    renderLeadership(slugValue);
   }
   function showAlert(el, message) {
     if (message) el.textContent = message;

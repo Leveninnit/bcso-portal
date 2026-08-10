@@ -33,6 +33,32 @@
     }
     return `<div class="form-row">${labelHtml}<input type="text" id="cq-${q.id}" data-qid="${q.id}" ${requiredAttr} /></div>`;
   }
+  // If command staff have configured Rank options for this subdivision
+  // (Command Access -> Activity Logs -> Ranks), swap the free-text Rank
+  // field for a dropdown built from those options. Otherwise the
+  // original text field stays exactly as it always has.
+  async function setupRankField(slug) {
+    const textInput = document.getElementById("rank");
+    const select = document.getElementById("rank-select");
+    if (!slug || slug === "general" || slug === "rtd") return; // RTD uses its own dedicated rank dropdown
+    try {
+      const res = await fetch(`/api/rank-options?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      const options = data.options || [];
+      if (!options.length) return;
+      select.innerHTML =
+        `<option value="">Select…</option>` +
+        options.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
+      textInput.style.display = "none";
+      textInput.required = false;
+      select.style.display = "";
+      select.required = true;
+    } catch {
+      // Custom rank options are an enhancement — if they fail to load,
+      // just keep the original free-text field.
+    }
+  }
+
   async function renderCustomQuestions(slug) {
     const container = document.getElementById("custom-questions");
     if (!container) return;
@@ -170,6 +196,7 @@
     const slugValue = document.getElementById("subdivisionSlug").value;
     renderCustomQuestions(slugValue);
     applyFieldLabelOverrides(slugValue);
+    setupRankField(slugValue);
 
     setRtdMode(isRtdSlug(slugValue));
     document.getElementById("rtdRole").addEventListener("change", updateRtdBranch);
@@ -234,14 +261,22 @@
 
     const slug = document.getElementById("subdivisionSlug").value;
     const rtd = isRtdSlug(slug);
-    const rank = rtd ? document.getElementById("rtdRank").value.trim() : document.getElementById("rank").value.trim();
+    const rankSelect = document.getElementById("rank-select");
+    const usingRankDropdown = rankSelect && rankSelect.style.display !== "none";
+    const rank = rtd
+      ? document.getElementById("rtdRank").value.trim()
+      : usingRankDropdown
+      ? rankSelect.value.trim()
+      : document.getElementById("rank").value.trim();
 
     const payload = {
       characterName: document.getElementById("characterName").value.trim(),
       discordId: document.getElementById("discordId").value.trim(),
       badgeNumber: document.getElementById("badgeNumber").value.trim(),
       rank,
-      hoursOnDuty: document.getElementById("hoursOnDuty").value.trim(),
+      durationHours: document.getElementById("hoursOnDuty").value.trim(),
+      durationMinutes: document.getElementById("durationMinutes").value.trim(),
+      durationSeconds: document.getElementById("durationSeconds").value.trim(),
       summary: document.getElementById("summary").value.trim(),
       subdivisionSlug: slug,
       subdivisionName: document.getElementById("subdivisionName").value,

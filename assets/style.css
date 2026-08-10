@@ -743,6 +743,15 @@ footer.site-footer a {
    Roster; Character Name and Discord ID shown here are resolved live
    from the Master Roster by badge number (see functions/api/roster.js). */
 
+#roster-section {
+  /* The "View Roster" document card (see documents.html) jumps here.
+     Without this, the sticky header (position: sticky, ~70px tall — see
+     header.site-header above) scrolls right on top of the "Roster"
+     heading, so the jump looks like it did nothing. scroll-margin-top
+     leaves room above the section so it lands clear of the header. */
+  scroll-margin-top: 100px;
+}
+
 .roster-table-wrap {
   overflow-x: auto;
   margin: 1.5rem 0 2.5rem;

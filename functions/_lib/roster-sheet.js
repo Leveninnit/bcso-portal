@@ -1,22 +1,37 @@
 /**
  * Shared helper for reading the Master Roster Google Sheet (the
- * "Employee Database" tab command staff maintain) as CSV, server-side.
+ * "Employee Database" tab command staff maintain), server-side.
  *
  * Used by:
  *   - functions/api/roster-lookup.js  (autofill on Apply/Log forms, by Discord ID)
  *   - functions/api/roster.js         (public per-subdivision Roster view, by Badge Number)
  *
- * Requires two Cloudflare environment variables (Settings -> Environment
- * variables in the Pages dashboard):
- *   ROSTER_SHEET_ID  - the spreadsheet ID (the long id in the sheet's URL,
- *                       between /d/ and /edit)
- *   ROSTER_SHEET_GID - the gid of the specific tab to read from (the
- *                       Employee Database tab, found after #gid= in the
- *                       URL when that tab is open)
+ * Two ways to read the sheet, tried in this order:
  *
- * The sheet must be shared as "Anyone with the link - Viewer" so this can
- * read it without a Google login. Only server-side code ever sees the
- * sheet's export URL — it's never sent to the browser.
+ * 1. Google Sheets API (preferred) — works for a sheet shared as
+ *    "Anyone with the link - Viewer" with NO need to also "Publish to
+ *    web". Requires:
+ *      GOOGLE_SHEETS_API_KEY - an API key from a Google Cloud project
+ *                               with the Google Sheets API enabled
+ *                               (Credentials -> Create Credentials ->
+ *                               API key; restrict it to the "Google
+ *                               Sheets API" only). The key only ever
+ *                               grants read access to sheets that are
+ *                               already link-shared — nothing private.
+ *      ROSTER_SHEET_TAB       - (optional) the exact tab name, defaults
+ *                               to "Employee Database".
+ *
+ * 2. CSV export fallback (used only if GOOGLE_SHEETS_API_KEY isn't
+ *    set) — https://docs.google.com/.../export?format=csv. This only
+ *    works for anonymous server-side requests if the sheet has ALSO
+ *    been "Published to web" (File -> Share -> Publish to web), not
+ *    just link-shared. Requires ROSTER_SHEET_GID (the gid of the tab).
+ *
+ * Both need ROSTER_SHEET_ID - the spreadsheet ID (the long id in the
+ * sheet's URL, between /d/ and /edit). Set these in Settings ->
+ * Environment variables in the Cloudflare Pages dashboard. Only
+ * server-side code ever sees the API key or export URL — neither is
+ * ever sent to the browser.
  *
  * Every function here fails soft (returns null / false / empty), never
  * throws — a roster lookup is always a convenience layered on top of
@@ -84,39 +99,71 @@ function findColumn(header, ...candidates) {
   return -1;
 }
 
-// Fetches + parses the Master Roster sheet once. Returns null if it
-// isn't configured or the fetch/parse fails for any reason — callers
-// should treat null exactly like "nothing found."
-export async function fetchRosterTable(env, { debug = false } = {}) {
-  const sheetId = env.ROSTER_SHEET_ID;
-  const gid = env.ROSTER_SHEET_GID || "0";
-  if (!sheetId) {
-    return debug ? { rows: null, debug: "ROSTER_SHEET_ID not set" } : null;
+function tableFromRows(rows, fetchStatus, source) {
+  if (!rows.length) return { rows: null, debug: "no rows parsed", fetchStatus, source };
+  const header = rows[0].map((h) => (h || "").trim().toLowerCase());
+  const idxDiscordId = findColumn(header, "discord id", "discord");
+  const idxName = findColumn(header, "name");
+  const idxBadge = findColumn(header, "badge number", "badge");
+  const idxRank = findColumn(header, "rank");
+  return { rows, header, idxDiscordId, idxName, idxBadge, idxRank, fetchStatus, debug: "ok", source };
+}
+
+// Reads via the Google Sheets API v4 with a plain API key. Works for a
+// sheet shared "Anyone with the link - Viewer" — no "Publish to web"
+// needed. See file header for how to get an API key.
+async function fetchViaSheetsApi(sheetId, apiKey, tabName) {
+  const tab = tabName || "Employee Database";
+  const range = `'${tab.replace(/'/g, "''")}'`;
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${encodeURIComponent(range)}?key=${apiKey}`;
+  let fetchStatus = null;
+  try {
+    const res = await fetch(url);
+    fetchStatus = res.status;
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return { rows: null, debug: "sheets api fetch failed", fetchStatus, body: body.slice(0, 400), source: "sheets-api" };
+    }
+    const data = await res.json();
+    const rows = data.values || [];
+    return tableFromRows(rows, fetchStatus, "sheets-api");
+  } catch (e) {
+    return { rows: null, debug: "sheets api fetch threw", error: String(e), source: "sheets-api" };
   }
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
-  let rows;
+}
+
+// Fallback: the CSV export URL. Only works for anonymous requests if
+// the sheet has also been "Published to web" (see file header).
+async function fetchViaCsvExport(sheetId, gid) {
+  const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid || "0"}`;
   let fetchStatus = null;
   try {
     const res = await fetch(csvUrl);
     fetchStatus = res.status;
     if (!res.ok) {
-      return debug ? { rows: null, debug: "fetch failed", fetchStatus } : null;
+      return { rows: null, debug: "csv export fetch failed", fetchStatus, source: "csv-export" };
     }
     const text = await res.text();
-    rows = parseCSV(text);
+    const rows = parseCSV(text);
+    return tableFromRows(rows, fetchStatus, "csv-export");
   } catch (e) {
-    return debug ? { rows: null, debug: "fetch threw", error: String(e) } : null;
+    return { rows: null, debug: "csv export fetch threw", error: String(e), source: "csv-export" };
   }
-  if (!rows.length) {
-    return debug ? { rows: null, debug: "no rows parsed", fetchStatus } : null;
+}
+
+// Fetches + parses the Master Roster sheet once. Returns null if it
+// isn't configured or the fetch/parse fails for any reason — callers
+// should treat null exactly like "nothing found."
+export async function fetchRosterTable(env, { debug = false } = {}) {
+  const sheetId = env.ROSTER_SHEET_ID;
+  if (!sheetId) {
+    return debug ? { rows: null, debug: "ROSTER_SHEET_ID not set" } : null;
   }
-  const header = rows[0].map((h) => h.trim().toLowerCase());
-  const idxDiscordId = findColumn(header, "discord id", "discord");
-  const idxName = findColumn(header, "name");
-  const idxBadge = findColumn(header, "badge number", "badge");
-  const idxRank = findColumn(header, "rank");
-  const table = { rows, header, idxDiscordId, idxName, idxBadge, idxRank, fetchStatus };
-  return debug ? { ...table, debug: "ok" } : table;
+  const result = env.GOOGLE_SHEETS_API_KEY
+    ? await fetchViaSheetsApi(sheetId, env.GOOGLE_SHEETS_API_KEY, env.ROSTER_SHEET_TAB)
+    : await fetchViaCsvExport(sheetId, env.ROSTER_SHEET_GID);
+  if (!result.rows) return debug ? result : null;
+  return result;
 }
 
 function personFromRow(table, row) {

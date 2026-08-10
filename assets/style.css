@@ -833,6 +833,45 @@ footer.site-footer a {
   min-width: 160px;
 }
 
+/* Department Status pill — resolved from the Master Roster's own
+   "Status" column by badge number (see functions/api/roster.js), never
+   typed in manually. Colored by keyword match so Active / LOA /
+   Inactive (and similar) are visually distinct at a glance. */
+.status-pill {
+  display: inline-block;
+  padding: 0.15rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  border: 1px solid;
+  white-space: nowrap;
+}
+
+.status-active {
+  color: #7be0a0;
+  border-color: #3f8a5c;
+  background: rgba(63, 138, 92, 0.14);
+}
+
+.status-loa {
+  color: var(--gold-bright);
+  border-color: var(--gold);
+  background: rgba(201, 162, 39, 0.14);
+}
+
+.status-inactive {
+  color: #e2958f;
+  border-color: #a1493f;
+  background: rgba(161, 73, 63, 0.14);
+}
+
+.status-unknown {
+  color: var(--muted);
+  border-color: var(--panel-border);
+  background: rgba(255, 255, 255, 0.03);
+}
+
 /* ---------- Ranks page (ranks.html) ----------
    Rank order per subdivision is managed from Command Access -> that
    subdivision -> Ranks, and that same order is now used to sort the

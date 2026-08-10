@@ -356,10 +356,11 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   // ---------------------------------------------------------------------
   // Roster — every subdivision's own member roster (including SRT),
   // shown publicly on that subdivision's Documents page. Each entry is
-  // just a Rank + Badge Number (+ optional Callsign/Notes) — Character
-  // Name and Discord ID are resolved live from the Master Roster sheet
-  // by badge number when the public roster is loaded (see
-  // functions/api/roster.js), so nothing here goes stale on its own.
+  // just a Rank + Badge Number (+ optional Notes) — Character Name,
+  // Discord ID, and Department Status (Active / LOA / Inactive, etc.)
+  // are resolved live from the Master Roster sheet by badge number when
+  // the public roster is loaded (see functions/api/roster.js), so
+  // nothing here goes stale on its own.
   // ---------------------------------------------------------------------
   let rosterRankOptionsCache = {}; // slug -> string[] (for the Rank autocomplete)
 
@@ -407,7 +408,6 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
           <div class="ca-question-row" data-entry-id="${e.id}">
             <div>
               <strong>${escapeHtml(e.rank || "(no rank set)")}</strong> &middot; Badge ${escapeHtml(e.badgeNumber)}
-              ${e.callsign ? `<div class="ca-question-meta">Callsign: ${escapeHtml(e.callsign)}</div>` : ""}
               ${e.notes ? `<div class="ca-question-meta">${escapeHtml(e.notes)}</div>` : ""}
             </div>
             <div class="ca-actions">
@@ -459,7 +459,6 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         subdivisionSlug: activeSlug,
         rank: e.rank,
         badgeNumber: e.badgeNumber,
-        callsign: e.callsign,
         notes: e.notes,
         sortOrder: e.sortOrder,
       }),
@@ -484,15 +483,11 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       <div class="form-row">
         <label>Badge Number *</label>
         <input type="text" id="ca-rs-badge" placeholder="e.g. 1042" value="${editing ? escapeHtml(editing.badgeNumber) : ""}" />
-        <span class="hint">Must match their Badge Number on the Master Roster exactly — that's how their Name and Discord ID get filled in automatically.</span>
-      </div>
-      <div class="form-row">
-        <label>Callsign (optional)</label>
-        <input type="text" id="ca-rs-callsign" placeholder="e.g. OCD-04" value="${editing ? escapeHtml(editing.callsign) : ""}" />
+        <span class="hint">Must match their Badge Number on the Master Roster exactly — that's how their Name, Discord ID, and Department Status (Active / LOA / Inactive, etc.) get filled in automatically.</span>
       </div>
       <div class="form-row">
         <label>Notes (optional)</label>
-        <input type="text" id="ca-rs-notes" placeholder="e.g. FTO, On LOA, Probationary — anything you want shown" value="${editing ? escapeHtml(editing.notes) : ""}" />
+        <input type="text" id="ca-rs-notes" placeholder="e.g. FTO, Probationary — anything you want shown" value="${editing ? escapeHtml(editing.notes) : ""}" />
       </div>
       <div class="ca-actions">
         <button class="ca-btn-accept" id="ca-rs-save">${editing ? "Save changes" : "Add to roster"}</button>
@@ -513,7 +508,6 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         subdivisionSlug: activeSlug,
         rank: el("ca-rs-rank").value.trim(),
         badgeNumber,
-        callsign: el("ca-rs-callsign").value.trim(),
         notes: el("ca-rs-notes").value.trim(),
       };
       const statusEl = el("ca-rs-status");

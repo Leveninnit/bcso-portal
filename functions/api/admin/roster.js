@@ -6,16 +6,21 @@
  * Roster — shown publicly on that subdivision's Documents page
  * (documents.html?div=slug). Every subdivision has one, including SRT.
  *
- * Each entry only stores Rank + Badge Number (+ optional Callsign /
- * Notes) and a manual sort order — Character Name and Discord ID are
- * NOT stored here. They're resolved live from the Master Roster Google
- * Sheet by badge number every time the roster is viewed (see
+ * Each entry only stores Rank + Badge Number (+ optional Notes) and a
+ * manual sort order — Character Name, Discord ID, and Department Status
+ * are NOT stored here. They're resolved live from the Master Roster
+ * Google Sheet by badge number every time the roster is viewed (see
  * functions/api/roster.js and functions/_lib/roster-sheet.js), so an
- * entry never goes stale when someone's name changes there.
+ * entry never goes stale when someone's name or status changes there.
+ *
+ * The "callsign" column still exists in the database for backward
+ * compatibility but is no longer collected by the Roster form or shown
+ * publicly (replaced by the auto-resolved Department Status) — safe to
+ * ignore.
  *
  * GET    ?div=slug                                          -> list entries, in order
- * POST   { subdivisionSlug, rank, badgeNumber, callsign, notes } -> add one
- * PUT    { id, subdivisionSlug, rank, badgeNumber, callsign, notes, sortOrder } -> edit
+ * POST   { subdivisionSlug, rank, badgeNumber, notes }      -> add one
+ * PUT    { id, subdivisionSlug, rank, badgeNumber, notes, sortOrder } -> edit
  * DELETE ?id=..&div=slug                                    -> remove
  *
  * Every write requires a valid Command Access session for that exact

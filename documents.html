@@ -24,7 +24,7 @@ see the current version.
 <div id="roster-section" style="display:none;">
 <h2 class="page-title" style="font-size:1.4rem;">Roster</h2>
 <p class="page-sub" id="roster-subtitle">Current members, kept up to date by command staff.</p>
-<div id="roster-grid" class="roster-grid"></div>
+<div id="roster-grid"></div>
 </div>
 
 <div id="doc-grid" class="sub-grid">
@@ -101,21 +101,37 @@ return;
 }
 document.getElementById("roster-subtitle").textContent =
 `${entries.length} member${entries.length === 1 ? "" : "s"} on the current ${sub.short} roster, kept up to date by command staff.`;
-grid.innerHTML = entries
+const rows = entries
 .map(
 (e) => `
-<div class="panel roster-card">
-${e.rank ? `<span class="badge-tag">${escapeHtml(e.rank)}</span>` : ""}
-<h3>${e.characterName ? escapeHtml(e.characterName) : `Badge ${escapeHtml(e.badgeNumber)}`}</h3>
-<p class="roster-meta">
-Badge ${escapeHtml(e.badgeNumber)}
-${e.callsign ? ` &middot; ${escapeHtml(e.callsign)}` : ""}
-</p>
-${e.notes ? `<p class="roster-notes">${escapeHtml(e.notes)}</p>` : ""}
-</div>
+<tr>
+<td class="rt-rank">${e.rank ? escapeHtml(e.rank) : `<span class="rt-empty">&mdash;</span>`}</td>
+<td>${escapeHtml(e.badgeNumber)}</td>
+<td class="rt-name">${e.characterName ? escapeHtml(e.characterName) : `<span class="rt-empty">Not on Master Roster</span>`}</td>
+<td class="rt-discord">${e.discordId ? escapeHtml(e.discordId) : `<span class="rt-empty">&mdash;</span>`}</td>
+<td>${e.callsign ? escapeHtml(e.callsign) : `<span class="rt-empty">&mdash;</span>`}</td>
+<td class="rt-notes">${e.notes ? escapeHtml(e.notes) : ""}</td>
+</tr>
 `
 )
 .join("");
+grid.innerHTML = `
+<div class="roster-table-wrap">
+<table class="roster-table">
+<thead>
+<tr>
+<th>Rank</th>
+<th>Badge #</th>
+<th>Name</th>
+<th>Discord ID</th>
+<th>Callsign</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>${rows}</tbody>
+</table>
+</div>
+`;
 section.style.display = "";
 } catch {
 section.style.display = "none";

@@ -51,7 +51,15 @@
       <div class="container">
         <h2 class="section-title">Patrol Gallery</h2>
         <p class="section-sub">A look at BCSO deputies out in Blaine County.</p>
-        <div class="photo-grid" id="patrol-photo-grid"></div>
+        <div class="photo-slideshow" id="patrol-slideshow">
+          <button type="button" class="photo-slide-arrow" id="patrol-slide-prev" aria-label="Previous photo">&#10094;</button>
+          <figure class="photo-slide-frame">
+            <img id="patrol-slide-img" alt="" />
+            <figcaption id="patrol-slide-caption"></figcaption>
+          </figure>
+          <button type="button" class="photo-slide-arrow" id="patrol-slide-next" aria-label="Next photo">&#10095;</button>
+        </div>
+        <div class="photo-slide-dots" id="patrol-slide-dots"></div>
       </div>
     </section>
     <section>

@@ -833,10 +833,21 @@ footer.site-footer a {
   min-width: 160px;
 }
 
-/* Department Status pill — resolved from the Master Roster's own
-   "Status" column by badge number (see functions/api/roster.js), never
-   typed in manually. Colored by keyword match so Active / LOA /
-   Inactive (and similar) are visually distinct at a glance. */
+/* Hours / Activations — computed from that subdivision's Activity Log
+   submissions by badge number (see functions/api/roster.js), all-time
+   totals. Centered, tabular numerals so the columns line up. */
+.roster-table td.rt-num {
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+/* Shared pill styling for both the Department Status column (resolved
+   from the Master Roster's own "Status" column by badge number, colored
+   by keyword match) and the Activity column (resolved from that
+   subdivision's Activity Log submissions this month — Active / Semi-
+   Active / Inactive). Neither is ever typed in manually — see
+   functions/api/roster.js. */
 .status-pill {
   display: inline-block;
   padding: 0.15rem 0.65rem;

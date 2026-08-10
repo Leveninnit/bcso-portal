@@ -358,7 +358,9 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   // shown publicly on that subdivision's Documents page. Each entry is
   // just a Rank + Badge Number (+ optional Notes) — Character Name,
   // Discord ID, and Department Status (Active / LOA / Inactive, etc.)
-  // are resolved live from the Master Roster sheet by badge number when
+  // are resolved live from the Master Roster sheet by badge number, and
+  // Hours / Activations / Activity are resolved live from that
+  // subdivision's Activity Log submissions by badge number, both when
   // the public roster is loaded (see functions/api/roster.js), so
   // nothing here goes stale on its own.
   // ---------------------------------------------------------------------
@@ -483,7 +485,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       <div class="form-row">
         <label>Badge Number *</label>
         <input type="text" id="ca-rs-badge" placeholder="e.g. 1042" value="${editing ? escapeHtml(editing.badgeNumber) : ""}" />
-        <span class="hint">Must match their Badge Number on the Master Roster exactly — that's how their Name, Discord ID, and Department Status (Active / LOA / Inactive, etc.) get filled in automatically.</span>
+        <span class="hint">Must match their Badge Number on the Master Roster exactly — that's how their Name, Discord ID, and Department Status get filled in automatically. It's also matched against their Activity Log submissions for this subdivision to fill in Hours, Activations, and Activity.</span>
       </div>
       <div class="form-row">
         <label>Notes (optional)</label>

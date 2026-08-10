@@ -115,11 +115,68 @@
     tone({ freq: 220, freqEnd: 900, duration: 0.3, type: "sine", gain: 0.05, delay: 0.02 });
     tone({ freq: 988, duration: 0.1, type: "sine", gain: 0.07, delay: 0.33 }); // B5
     tone({ freq: 1318.5, duration: 0.18, type: "sine", gain: 0.08, delay: 0.44 }); // E6
+    speakAuthorized();
   }
   // Access-denied cue — two flat, low buzzes.
   function playAuthDenied() {
     tone({ freq: 150, freqEnd: 90, duration: 0.22, type: "square", gain: 0.07, delay: 0 });
     tone({ freq: 150, freqEnd: 90, duration: 0.22, type: "square", gain: 0.07, delay: 0.28 });
+    speakDenied();
+  }
+
+  // ------------------------------------------------------------------
+  // Spoken authority-voice line, using the browser's built-in
+  // Speech Synthesis API — not a recording, so there's nothing to
+  // download or license. Pitched down and slowed slightly so it reads
+  // as a stern command-terminal voice rather than a normal narrator.
+  // ------------------------------------------------------------------
+  let cachedVoices = [];
+  function refreshVoices() {
+    try {
+      cachedVoices = (window.speechSynthesis && window.speechSynthesis.getVoices()) || [];
+    } catch {
+      cachedVoices = [];
+    }
+  }
+  if ("speechSynthesis" in window) {
+    refreshVoices();
+    window.speechSynthesis.onvoiceschanged = refreshVoices;
+  }
+  function pickAuthorityVoice() {
+    // Prefer a deeper/male-leaning English voice if the browser offers
+    // one, so it sounds more like an authority figure than a default
+    // assistant voice. Falls back to whatever the browser picks.
+    const byName = (re) => cachedVoices.find((v) => re.test(v.name) && /en/i.test(v.lang));
+    return (
+      byName(/\b(David|Daniel|Guy|Mark|Google UK English Male)\b/i) ||
+      cachedVoices.find((v) => /en/i.test(v.lang)) ||
+      null
+    );
+  }
+  function speak(text, { rate = 0.92, pitch = 0.72, volume = 1 } = {}) {
+    if (isMuted()) return;
+    if (!("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel(); // don't let lines stack up/overlap
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = rate;
+      utter.pitch = pitch;
+      utter.volume = volume;
+      const voice = pickAuthorityVoice();
+      if (voice) utter.voice = voice;
+      window.speechSynthesis.speak(utter);
+    } catch {
+      // Speech synthesis is a nice-to-have on top of the tones above —
+      // ignore failures quietly (e.g. unsupported browser).
+    }
+  }
+  function speakAuthorized() {
+    // Fires just after the granted chime finishes so the two don't talk
+    // over each other.
+    setTimeout(() => speak("Command authorised."), 650);
+  }
+  function speakDenied() {
+    setTimeout(() => speak("Access denied."), 550);
   }
 
   // ------------------------------------------------------------------
@@ -246,6 +303,7 @@
     playError,
     playAuthGranted,
     playAuthDenied,
+    speak,
     isMuted,
     setMuted,
   };

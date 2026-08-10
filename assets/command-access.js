@@ -148,6 +148,15 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       btn.addEventListener("click", () => {
         activeSlug = btn.dataset.slug;
         activeInnerTab = "review";
+        // Reset the Applications/Activity Logs choice for the newly
+        // selected subdivision instead of leaving whatever the
+        // previous subdivision left behind (e.g. SRT is log-only and
+        // forces "log" — without this, switching from SRT to a
+        // subdivision that DOES have applications would silently land
+        // on its Activity Logs tab, and — since the "Ranks" tab is
+        // shown for one specific formType at a time — could leave the
+        // person unable to find Ranks where they expected it).
+        activeFormType = subInfo(activeSlug).logOnly ? "log" : "application";
         renderSubContent();
       });
     });
@@ -1125,9 +1134,15 @@ function renderDocumentForm(editing) {
     }
     box.innerHTML = templates
       .map((t) => {
-        const segments = [`<@${discordId}> → ${t.roleIds.map((r) => `<@&${r}>`).join(" & ")}`, date];
+        // Fixed segment order: the movement itself (ping + this
+        // template's fixed wording, if any), then who approved it,
+        // then any one-off notes, then the date — the date always
+        // goes last, notes always sit right before it.
+        const segments = [`<@${discordId}> → ${t.roleIds.map((r) => `<@&${r}>`).join(" & ")}`];
+        if (t.wording) segments.push(t.wording);
+        if (approved) segments.push(`Approved by: ${approved.mention}`);
         if (notes) segments.push(notes);
-        if (approved) segments.push(`Approved By ${approved.mention}`);
+        segments.push(date);
         const text = discordId ? segments.join(" | ") : "";
         const scopeTag = t.subdivisionSlug ? ` <span class="ca-question-meta">(${escapeHtml(t.subdivisionSlug.toUpperCase())})</span>` : "";
         return `
@@ -1189,6 +1204,7 @@ function renderDocumentForm(editing) {
               <strong>${escapeHtml(t.name)}</strong>
               <span class="ca-option-chip">${t.subdivisionSlug ? escapeHtml(t.subdivisionSlug.toUpperCase()) : "Department-wide"}</span>
               <div class="ca-question-meta">${t.roleIds.map((r) => escapeHtml(r)).join(", ")}</div>
+              ${t.wording ? `<div class="ca-question-meta">Wording: ${escapeHtml(t.wording)}</div>` : ""}
             </div>
             <div class="ca-actions">
               <button class="ca-btn-delete" data-mvaction="edit" data-mvid="${t.id}">Edit</button>
@@ -1235,6 +1251,11 @@ function renderDocumentForm(editing) {
         <input type="text" id="ca-mv-t-roles" value="${escapeHtml((editing?.roleIds || []).join(", "))}" placeholder="e.g. 1283145857176440923, 1285706620374093854" />
         <p class="ca-muted" style="margin-top:0.35rem;">Separate multiple role IDs with commas. In Discord, enable Developer Mode, then right-click a role → Copy Role ID.</p>
       </div>
+      <div class="form-row">
+        <label>Wording (optional)</label>
+        <input type="text" id="ca-mv-t-wording" value="${escapeHtml(editing?.wording || "")}" placeholder="e.g. is being suspended pending investigation" maxlength="300" />
+        <p class="ca-muted" style="margin-top:0.35rem;">Included automatically in every message generated from this template, right after the role pings.</p>
+      </div>
       <div class="ca-actions">
         <button class="ca-btn-accept" id="ca-mv-t-save">${isEdit ? "Save changes" : "Add template"}</button>
         ${isEdit ? `<button class="ca-btn-delete" id="ca-mv-t-cancel">Cancel</button>` : ""}
@@ -1249,6 +1270,7 @@ function renderDocumentForm(editing) {
         .value.split(",")
         .map((r) => r.trim())
         .filter(Boolean);
+      const wording = el("ca-mv-t-wording").value.trim();
       if (!name) {
         alert("Please enter a template name.");
         return;
@@ -1257,7 +1279,7 @@ function renderDocumentForm(editing) {
         alert("Enter one or more valid numeric Discord role IDs, separated by commas.");
         return;
       }
-      const payload = { name, roleIds };
+      const payload = { name, roleIds, wording };
       if (scope) payload.subdivisionSlug = scope;
       if (isEdit) {
         await fetch("/api/admin/movement-templates", {

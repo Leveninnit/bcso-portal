@@ -6,18 +6,19 @@
  * Documents page (documents.html?div=slug). Every subdivision has one,
  * including SRT.
  *
- * Command staff only enter a Rank + Badge Number (+ optional Callsign /
- * Notes) per entry, from Command Access -> that subdivision -> Roster
- * (see functions/api/admin/roster.js). Character Name and Discord ID
- * are never stored — this endpoint resolves them live from the Master
- * Roster Google Sheet by badge number every time the roster is loaded
- * (see functions/_lib/roster-sheet.js), so a name change there shows up
- * on the portal immediately with nothing to keep in sync by hand.
+ * Command staff only enter a Rank + Badge Number (+ optional Notes) per
+ * entry, from Command Access -> that subdivision -> Roster (see
+ * functions/api/admin/roster.js). Character Name, Discord ID, and
+ * Department Status are never stored — this endpoint resolves them live
+ * from the Master Roster Google Sheet by badge number every time the
+ * roster is loaded (see functions/_lib/roster-sheet.js), so a name or
+ * status change there shows up on the portal immediately with nothing
+ * to keep in sync by hand.
  *
  * Fails soft: an entry whose badge number isn't found on the Master
  * Roster (not yet added there, typo, etc.) is still returned with
- * whatever was entered, just with an empty name/discordId — the roster
- * always renders, it just can't fill in a name it doesn't have.
+ * whatever was entered, just with an empty name/discordId/status — the
+ * roster always renders, it just can't fill in what it doesn't have.
  *
  * Sort order: if the subdivision has a Rank list configured (Command
  * Access -> that subdivision -> Ranks, also shown on ranks.html), the
@@ -48,7 +49,7 @@ export async function onRequestGet(context) {
   }
   try {
     const { results } = await env.DB.prepare(
-      "SELECT rank, badge_number, callsign, notes FROM roster_entries WHERE subdivision_slug = ? ORDER BY sort_order ASC, id ASC"
+      "SELECT rank, badge_number, notes FROM roster_entries WHERE subdivision_slug = ? ORDER BY sort_order ASC, id ASC"
     )
       .bind(div)
       .all();
@@ -86,10 +87,10 @@ export async function onRequestGet(context) {
       return {
         rank: r.rank,
         badgeNumber: r.badge_number,
-        callsign: r.callsign,
         notes: r.notes,
         characterName: person.found ? person.name : "",
         discordId: person.found ? person.discordId : "",
+        departmentStatus: person.found ? person.departmentStatus : "",
       };
     });
     return jsonResponse({ entries }, 200);

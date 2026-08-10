@@ -50,6 +50,7 @@
   let questionLabelCache = {}; // `${slug}:${type}` -> { [questionId]: label }
   let movementInnerTabByScope = {}; // "global" | slug -> "generate" | "customize"
   let movementTemplatesCacheByScope = {}; // "global" | slug -> templates array
+  let movementApprovedByScope = {}; // "global" | slug -> { mention: "<@id>" | "<@&id>" } | undefined
 let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed once
 
   function el(id) {
@@ -1021,10 +1022,12 @@ function renderDocumentForm(editing) {
   }
 
   async function renderMovementGenerate(scope) {
+    const key = scope || "global";
     const panel = el("ca-movement-panel");
+    const approved = movementApprovedByScope[key];
     panel.innerHTML = `
       <div class="panel">
-        <p class="ca-muted">Enter the deputy's Discord ID and a date, then copy whichever message applies straight into the movements channel. Every generated message ends with a blank "Approved By" line for whoever posts it to fill in.</p>
+        <p class="ca-muted">Enter the deputy's Discord ID and a date, add any extra text if needed, then copy whichever message applies straight into the movements channel.</p>
         <div class="form-row">
           <label for="ca-mv-discord-id">Discord ID</label>
           <input type="text" id="ca-mv-discord-id" placeholder="e.g. 123456789012345678" />
@@ -1033,29 +1036,99 @@ function renderDocumentForm(editing) {
           <label for="ca-mv-date">Date</label>
           <input type="text" id="ca-mv-date" value="${todayAmerican()}" placeholder="MM/DD/YY" />
         </div>
+        <div class="form-row">
+          <label for="ca-mv-notes">Additional text (optional)</label>
+          <input type="text" id="ca-mv-notes" placeholder="e.g. reason, notes, extra context to include in the message" />
+        </div>
+        <div class="form-row">
+          <label>Approved By</label>
+          <p class="ca-muted" style="margin:0 0 0.5rem;">Enter the ID of whoever is approving this — either a person's Discord ID or a role ID — and pick which one it is, then add it to the messages below.</p>
+          <div class="ca-movement-row" style="margin-bottom:0.35rem;">
+            <input type="text" id="ca-mv-approved-id" placeholder="e.g. 123456789012345678" style="flex:1;min-width:220px;" />
+            <select id="ca-mv-approved-type">
+              <option value="person">Person</option>
+              <option value="role">Role</option>
+            </select>
+            <button type="button" class="ca-btn-accept" id="ca-mv-approved-add">Add Approved By</button>
+            ${approved ? `<button type="button" class="ca-btn-delete" id="ca-mv-approved-clear">Clear</button>` : ""}
+          </div>
+          <p class="ca-muted" id="ca-mv-approved-status">${approved ? `Currently added: ${escapeHtml(approved.mention)}` : "Not added yet — messages below won't include an Approved By line until you add one."}</p>
+        </div>
         <div id="ca-mv-templates">Loading…</div>
       </div>
     `;
     el("ca-mv-discord-id").addEventListener("input", () => renderMovementResults(scope));
     el("ca-mv-date").addEventListener("input", () => renderMovementResults(scope));
+    el("ca-mv-notes").addEventListener("input", () => renderMovementResults(scope));
+    el("ca-mv-approved-add").addEventListener("click", () => {
+      const id = el("ca-mv-approved-id").value.trim();
+      const type = el("ca-mv-approved-type").value;
+      if (!/^\d{5,25}$/.test(id)) {
+        alert("Enter a valid numeric Discord ID for the approver (person or role).");
+        return;
+      }
+      movementApprovedByScope[key] = { mention: type === "role" ? `<@&${id}>` : `<@${id}>` };
+      updateApprovedByUI(scope);
+      renderMovementResults(scope);
+    });
+    updateApprovedByUI(scope);
     await renderMovementResults(scope);
+  }
+
+  // Updates just the Approved By status line + Clear button, without
+  // rebuilding the whole Generate panel (which would wipe whatever the
+  // user already typed into the Discord ID / Date / Notes fields).
+  function updateApprovedByUI(scope) {
+    const key = scope || "global";
+    const approved = movementApprovedByScope[key];
+    const status = el("ca-mv-approved-status");
+    if (status) {
+      status.textContent = approved
+        ? `Currently added: ${approved.mention}`
+        : "Not added yet — messages below won't include an Approved By line until you add one.";
+    }
+    let clearBtn = el("ca-mv-approved-clear");
+    const row = el("ca-mv-approved-add")?.parentElement;
+    if (approved && !clearBtn && row) {
+      clearBtn = document.createElement("button");
+      clearBtn.type = "button";
+      clearBtn.className = "ca-btn-delete";
+      clearBtn.id = "ca-mv-approved-clear";
+      clearBtn.textContent = "Clear";
+      row.appendChild(clearBtn);
+    }
+    if (!approved && clearBtn) {
+      clearBtn.remove();
+      clearBtn = null;
+    }
+    if (clearBtn) {
+      clearBtn.onclick = () => {
+        delete movementApprovedByScope[key];
+        updateApprovedByUI(scope);
+        renderMovementResults(scope);
+      };
+    }
   }
 
   async function renderMovementResults(scope) {
     const box = el("ca-mv-templates");
     if (!box) return;
+    const key = scope || "global";
     const templates = await fetchMovementTemplates(scope);
     const discordId = el("ca-mv-discord-id")?.value.trim();
     const date = el("ca-mv-date")?.value.trim() || todayAmerican();
+    const notes = el("ca-mv-notes")?.value.trim();
+    const approved = movementApprovedByScope[key];
     if (!templates.length) {
       box.innerHTML = `<p class="ca-muted">No templates yet — add one under "Customize Templates".</p>`;
       return;
     }
     box.innerHTML = templates
       .map((t) => {
-        const text = discordId
-          ? `<@${discordId}> → ${t.roleIds.map((r) => `<@&${r}>`).join(" & ")} | ${date} | Approved By @ |`
-          : "";
+        const segments = [`<@${discordId}> → ${t.roleIds.map((r) => `<@&${r}>`).join(" & ")}`, date];
+        if (notes) segments.push(notes);
+        if (approved) segments.push(`Approved By ${approved.mention}`);
+        const text = discordId ? segments.join(" | ") : "";
         const scopeTag = t.subdivisionSlug ? ` <span class="ca-question-meta">(${escapeHtml(t.subdivisionSlug.toUpperCase())})</span>` : "";
         return `
           <div class="ca-movement-row">

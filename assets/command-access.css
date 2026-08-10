@@ -258,6 +258,28 @@
      font-family: inherit;
 }
 
+/* Approved By controls (Discord ID input + Person/Role select) on the
+   Deputy Movement Generate tab — same issue as #ca-status-filter above:
+   they live inside .ca-movement-row, not .form-row, so they'd otherwise
+   miss style.css's dark input/select styling and fall back to the
+   browser default (white background). */
+#ca-mv-approved-id,
+#ca-mv-approved-type {
+     background: #0c1c13;
+     border: 1px solid var(--panel-border);
+     color: var(--text);
+     border-radius: 8px;
+     padding: 0.5rem 0.8rem;
+     font-size: 0.95rem;
+     font-family: inherit;
+}
+#ca-mv-approved-id:focus,
+#ca-mv-approved-type:focus {
+     outline: none;
+     border-color: var(--gold);
+     box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
+}
+
 /* Leadership tab */
 .ca-leadership-grid {
      display: grid;

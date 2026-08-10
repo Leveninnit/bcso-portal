@@ -36,6 +36,8 @@
  * names/formatting and this function's expectations can be diagnosed.
  * Remove this block once auto-fill is confirmed working.
  */
+import { fetchRosterTable, lookupByDiscordId, normalizeId } from "../_lib/roster-sheet.js";
+
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
     status,
@@ -45,102 +47,16 @@ function jsonResponse(body, status) {
     },
   });
 }
-function normalizeId(value) {
-  return (value || "").toString().replace(/[^0-9]/g, "");
-}
-function parseCSV(text) {
-  const rows = [];
-  let row = [];
-  let field = "";
-  let inQuotes = false;
-  for (let i = 0; i < text.length; i++) {
-    const char = text[i];
-    const next = text[i + 1];
-    if (inQuotes) {
-      if (char === '"' && next === '"') {
-        field += '"';
-        i++;
-      } else if (char === '"') {
-        inQuotes = false;
-      } else {
-        field += char;
-      }
-    } else if (char === '"') {
-      inQuotes = true;
-    } else if (char === ",") {
-      row.push(field);
-      field = "";
-    } else if (char === "\n" || char === "\r") {
-      if (char === "\r" && next === "\n") i++;
-      row.push(field);
-      rows.push(row);
-      row = [];
-      field = "";
-    } else {
-      field += char;
-    }
-  }
-  if (field.length || row.length) {
-    row.push(field);
-    rows.push(row);
-  }
-  return rows.filter((r) => r.some((cell) => cell !== ""));
-}
-function findColumn(header, ...candidates) {
-  for (const candidate of candidates) {
-    const idx = header.findIndex((h) => h === candidate);
-    if (idx !== -1) return idx;
-  }
-  for (const candidate of candidates) {
-    const idx = header.findIndex((h) => h.includes(candidate));
-    if (idx !== -1) return idx;
-  }
-  return -1;
-}
 export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const discordId = normalizeId(url.searchParams.get("discordId"));
   const debug = url.searchParams.get("debug");
-  const sheetId = env.ROSTER_SHEET_ID;
-  const gid = env.ROSTER_SHEET_GID || "0";
-  if (!sheetId) {
-    return jsonResponse(
-      debug ? { found: false, debug: "ROSTER_SHEET_ID not set" } : { found: false },
-      200
-    );
+
+  const table = await fetchRosterTable(env, { debug: !!debug });
+  if (!table || !table.rows) {
+    return jsonResponse(debug ? { found: false, ...table } : { found: false }, 200);
   }
-  const csvUrl = `https://docs.google.com/spreadsheets/d/${sheetId}/export?format=csv&gid=${gid}`;
-  let rows;
-  let fetchStatus = null;
-  try {
-    const res = await fetch(csvUrl);
-    fetchStatus = res.status;
-    if (!res.ok) {
-      return jsonResponse(
-        debug ? { found: false, debug: "fetch failed", fetchStatus } : { found: false },
-        200
-      );
-    }
-    const text = await res.text();
-    rows = parseCSV(text);
-  } catch (e) {
-    return jsonResponse(
-      debug ? { found: false, debug: "fetch threw", error: String(e) } : { found: false },
-      200
-    );
-  }
-  if (!rows.length) {
-    return jsonResponse(
-      debug ? { found: false, debug: "no rows parsed", fetchStatus } : { found: false },
-      200
-    );
-  }
-  const header = rows[0].map((h) => h.trim().toLowerCase());
-  const idxDiscordId = findColumn(header, "discord id", "discord");
-  const idxName = findColumn(header, "name");
-  const idxBadge = findColumn(header, "badge number", "badge");
-  const idxRank = findColumn(header, "rank");
 
   if (debug) {
     // Show the header row, row count, and the raw (unmodified) contents
@@ -148,17 +64,15 @@ export async function onRequestGet(context) {
     // (e.g. Google turning a long ID into scientific notation) are
     // visible. No names/badges/ranks are included.
     const rawDiscordCells =
-      idxDiscordId !== -1
-        ? rows.slice(1).map((r) => r[idxDiscordId])
-        : [];
+      table.idxDiscordId !== -1 ? table.rows.slice(1).map((r) => r[table.idxDiscordId]) : [];
     return jsonResponse(
       {
         found: false,
         debug: "ok",
-        fetchStatus,
-        header,
-        rowCount: rows.length - 1,
-        idxDiscordId,
+        fetchStatus: table.fetchStatus,
+        header: table.header,
+        rowCount: table.rows.length - 1,
+        idxDiscordId: table.idxDiscordId,
         rawDiscordCells,
         normalizedInput: discordId,
       },
@@ -169,18 +83,10 @@ export async function onRequestGet(context) {
   if (!discordId) {
     return jsonResponse({ found: false, error: "Missing discordId." }, 400);
   }
-  if (idxDiscordId === -1) return jsonResponse({ found: false }, 200);
-  const match = rows
-    .slice(1)
-    .find((r) => normalizeId(r[idxDiscordId]) === discordId);
-  if (!match) return jsonResponse({ found: false }, 200);
+  const person = lookupByDiscordId(table, discordId);
+  if (!person.found) return jsonResponse({ found: false }, 200);
   return jsonResponse(
-    {
-      found: true,
-      name: idxName !== -1 ? (match[idxName] || "").trim() : "",
-      badgeNumber: idxBadge !== -1 ? (match[idxBadge] || "").trim() : "",
-      rank: idxRank !== -1 ? (match[idxRank] || "").trim() : "",
-    },
+    { found: true, name: person.name, badgeNumber: person.badgeNumber, rank: person.rank },
     200
   );
 }

@@ -87,8 +87,9 @@ grid.innerHTML = (window.SUBDIVISIONS || []).map((s) => `
 // command staff manage entries from Command Access -> that subdivision
 // -> Roster (see assets/command-access.js). Character Name, Discord ID,
 // and Department Status are resolved server-side by badge number
-// against the Master Roster, so they're always current with nothing to
-// keep in sync here.
+// against the Master Roster, and Hours / Activations / Activity are
+// resolved server-side from that subdivision's Activity Log submissions
+// (see functions/api/roster.js) — none of it is kept in sync here.
 function statusPillClass(status) {
 const s = (status || "").toLowerCase();
 if (/inactive|terminated|resign/.test(s)) return "status-inactive";
@@ -99,6 +100,18 @@ return "status-unknown";
 function renderStatusCell(status) {
 if (!status) return `<span class="rt-empty">&mdash;</span>`;
 return `<span class="status-pill ${statusPillClass(status)}">${escapeHtml(status)}</span>`;
+}
+// Activity Level pill — computed from THIS MONTH's Activity Log
+// submissions for the person's badge number (see activityLevelFor in
+// functions/api/roster.js), not from Department Status. Reuses the same
+// green/gold/red pill styling as the status pill above.
+function activityPillClass(level) {
+if (level === "Active") return "status-active";
+if (level === "Semi-Active") return "status-loa";
+return "status-inactive";
+}
+function renderActivityCell(level) {
+return `<span class="status-pill ${activityPillClass(level)}">${escapeHtml(level || "Inactive")}</span>`;
 }
 async function loadSubdivisionRoster(sub) {
 const section = document.getElementById("roster-section");
@@ -122,6 +135,9 @@ const rows = entries
 <td class="rt-name">${e.characterName ? escapeHtml(e.characterName) : `<span class="rt-empty">Not on Master Roster</span>`}</td>
 <td class="rt-discord">${e.discordId ? escapeHtml(e.discordId) : `<span class="rt-empty">&mdash;</span>`}</td>
 <td>${renderStatusCell(e.departmentStatus)}</td>
+<td class="rt-num">${e.hoursLogged || 0}</td>
+<td class="rt-num">${e.activations || 0}</td>
+<td>${renderActivityCell(e.activityLevel)}</td>
 <td class="rt-notes">${e.notes ? escapeHtml(e.notes) : ""}</td>
 </tr>
 `
@@ -137,6 +153,9 @@ grid.innerHTML = `
 <th>Name</th>
 <th>Discord ID</th>
 <th>Department Status</th>
+<th>Hours</th>
+<th>Activations</th>
+<th>Activity</th>
 <th>Notes</th>
 </tr>
 </thead>
@@ -168,13 +187,32 @@ if (!docs.length) {
 grid.innerHTML = `<p style="color: var(--muted);">No documents have been added for ${escapeHtml(sub.name)} yet.</p>`;
 return;
 }
-grid.innerHTML = docs.map((d) => `
+grid.innerHTML = docs.map((d) => {
+// "Main Roster" is a special case: it used to link out to the old
+// Master Roster spreadsheet, but that's been replaced by the live
+// Roster table above (Character Name/Discord ID/Department
+// Status/Hours/Activations/Activity all resolved automatically) — so
+// instead of opening the old document, it jumps down to that table
+// on this same page. Matched by name only; the actual url stored for
+// this document (Command Access -> Documents) is unused in this case.
+const isMainRoster = (d.name || "").trim().toLowerCase() === "main roster";
+if (isMainRoster) {
+return `
+<div class="panel sub-card">
+<h3>${escapeHtml(d.name)}</h3>
+<p>${escapeHtml(d.description)}</p>
+<a class="btn btn-gold" href="#roster-section">View Roster</a>
+</div>
+`;
+}
+return `
 <div class="panel sub-card">
 <h3>${escapeHtml(d.name)}</h3>
 <p>${escapeHtml(d.description)}</p>
 <a class="btn btn-gold" href="${d.url}" target="_blank" rel="noopener">Open Document</a>
 </div>
-`).join("");
+`;
+}).join("");
 } catch {
 grid.innerHTML = `<p style="color: var(--muted);">Couldn't load documents. Try refreshing.</p>`;
 }

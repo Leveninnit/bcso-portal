@@ -3,19 +3,19 @@
  * /api/admin/movement-templates
  *
  * Lets Command staff manage a set of reusable "movement" templates. Each
- * template has a name, one or more Discord role IDs to ping, and an
- * optional fixed "wording" (e.g. "is being suspended pending
- * investigation") that's baked into every message generated from that
- * template. The dashboard's Deputy Movement tab (department-wide) and
- * each subdivision's own Movement Templates tab use these to generate a
+ * template has a name and a list of one or more entries to include in
+ * the generated message — each entry is EITHER a numeric Discord role ID
+ * (pinged as <@&id>) OR a plain word/phrase (included as literal text),
+ * mixed freely in whatever order the template author wants. The
+ * dashboard's Deputy Movement tab (department-wide) and each
+ * subdivision's own Movement Templates tab use these to generate a
  * ready-to-paste Discord message for a given Discord ID and date, for
  * posting into the movements channel. The Generate tab also lets
- * whoever's posting add their own free-text notes on top (separate from
- * a template's wording) and an "Approved By" mention (a person's or
- * role's Discord ID, resolved to <@id> or <@&id>) — those two are
- * assembled client-side in assets/command-access.js and are never
- * persisted; this API stores the reusable name/role-ping/wording
- * templates themselves.
+ * whoever's posting add their own free-text notes and an "Approved By"
+ * mention (a person's or role's Discord ID, resolved to <@id> or
+ * <@&id>) — both of those are assembled client-side in
+ * assets/command-access.js and are never persisted; this API only
+ * stores the reusable name/entries templates themselves.
  *
  * A template with no subdivisionSlug is department-wide (visible and
  * manageable by anyone holding the Command Login role, e.g. the original
@@ -23,14 +23,17 @@
  * only shows up on that subdivision's own tab, and only that
  * subdivision's command-role holders can manage it.
  *
- * GET    [?div=slug]                                            -> list templates (global, or global + that subdivision's own)
- * POST   { name, roleIds: [".."], wording?, subdivisionSlug? }  -> create
- * PUT    { id, name, roleIds: [".."], wording?, subdivisionSlug? } -> update
- * DELETE ?id=..                                                  -> remove
+ * GET    [?div=slug]                                  -> list templates (global, or global + that subdivision's own)
+ * POST   { name, roleIds: [".."], subdivisionSlug? }  -> create
+ * PUT    { id, name, roleIds: [".."], subdivisionSlug? } -> update
+ * DELETE ?id=..                                        -> remove
+ *
+ * "roleIds" is a bit of a misnomer carried over from when this only
+ * accepted role IDs — it's still the field/column name (role_ids_json),
+ * but each entry may now be a role ID or a plain word.
  *
  * Requires the D1 database bound as "DB", and the movement_templates
- * table plus its `wording` column (see schema.sql / migration-2.sql /
- * migration-3.sql).
+ * table (see schema.sql / migration-2.sql).
  */
 import { requireSession } from "../../_lib/auth-guard.js";
 
@@ -45,11 +48,13 @@ function parseTemplate(row) {
     id: row.id,
     name: row.name,
     roleIds: row.role_ids_json ? JSON.parse(row.role_ids_json) : [],
-    wording: row.wording || "",
     sortOrder: row.sort_order,
     subdivisionSlug: row.subdivision_slug || null,
   };
 }
+// Each entry is either a numeric Discord role ID or a plain word/phrase
+// — both are valid, so the only real requirement is at least one
+// non-empty entry, each capped to a sane length.
 function validShape(body) {
   return (
     body &&
@@ -57,16 +62,9 @@ function validShape(body) {
     body.name.trim() &&
     Array.isArray(body.roleIds) &&
     body.roleIds.length > 0 &&
-    body.roleIds.every((r) => /^\d{5,25}$/.test(String(r).trim())) &&
-    (body.wording === undefined || body.wording === null || typeof body.wording === "string")
+    body.roleIds.every((r) => typeof r === "string" || typeof r === "number") &&
+    body.roleIds.map((r) => String(r).trim()).every((r) => r.length > 0 && r.length <= 200)
   );
-}
-// Optional per-template fixed wording. Trimmed and length-capped; an
-// empty/missing value is stored as NULL (not an empty string) so it
-// round-trips cleanly through `row.wording || ""` in parseTemplate.
-function sanitizeWording(body) {
-  const w = typeof body.wording === "string" ? body.wording.trim().slice(0, 300) : "";
-  return w || null;
 }
 
 export async function onRequestGet(context) {
@@ -106,12 +104,11 @@ export async function onRequestPost(context) {
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
   await env.DB.prepare(
-    `INSERT INTO movement_templates (name, role_ids_json, wording, sort_order, subdivision_slug) VALUES (?, ?, ?, ?, ?)`
+    `INSERT INTO movement_templates (name, role_ids_json, sort_order, subdivision_slug) VALUES (?, ?, ?, ?)`
   )
     .bind(
       body.name.trim().slice(0, 100),
       JSON.stringify(body.roleIds.map((r) => String(r).trim())),
-      sanitizeWording(body),
       Number.isFinite(body.sortOrder) ? body.sortOrder : 9999,
       subdivisionSlug
     )
@@ -135,13 +132,12 @@ export async function onRequestPut(context) {
 
   await env.DB.prepare(
     `UPDATE movement_templates
-     SET name = ?, role_ids_json = ?, wording = ?, sort_order = ?, subdivision_slug = ?, updated_at = datetime('now')
+     SET name = ?, role_ids_json = ?, sort_order = ?, subdivision_slug = ?, updated_at = datetime('now')
      WHERE id = ?`
   )
     .bind(
       body.name.trim().slice(0, 100),
       JSON.stringify(body.roleIds.map((r) => String(r).trim())),
-      sanitizeWording(body),
       Number.isFinite(body.sortOrder) ? body.sortOrder : 0,
       subdivisionSlug,
       body.id

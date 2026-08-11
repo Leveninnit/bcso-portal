@@ -21,12 +21,6 @@ Official department documents, kept up to date in Google Docs.
 Each link opens the live document in a new tab so you always
 see the current version.
 </p>
-<div id="roster-section" style="display:none;">
-<h2 class="page-title" style="font-size:1.4rem;">Roster</h2>
-<p class="page-sub" id="roster-subtitle">Current members, kept up to date by command staff.</p>
-<div id="roster-grid"></div>
-</div>
-
 <div id="doc-grid" class="sub-grid">
 <!-- populated by JS from assets/documents.js -->
 </div>
@@ -83,114 +77,6 @@ grid.innerHTML = (window.SUBDIVISIONS || []).map((s) => `
 </div>
 `).join("");
 }
-// Roster is scoped to whichever subdivision's Documents page this is —
-// command staff manage entries from Command Access -> that subdivision
-// -> Roster (see assets/command-access.js). Character Name, Discord ID,
-// and Department Status are resolved server-side by badge number
-// against the Master Roster, and Hours / Activations / Activity are
-// resolved server-side from that subdivision's Activity Log submissions
-// (see functions/api/roster.js) — none of it is kept in sync here.
-function statusPillClass(status) {
-const s = (status || "").toLowerCase();
-if (/inactive|terminated|resign/.test(s)) return "status-inactive";
-if (/loa|leave/.test(s)) return "status-loa";
-if (/active/.test(s)) return "status-active";
-return "status-unknown";
-}
-function renderStatusCell(status) {
-if (!status) return `<span class="rt-empty">&mdash;</span>`;
-return `<span class="status-pill ${statusPillClass(status)}">${escapeHtml(status)}</span>`;
-}
-// Activity Level pill — computed from THIS MONTH's Activity Log
-// submissions for the person's badge number (see activityLevelFor in
-// functions/api/roster.js), not from Department Status. Reuses the same
-// green/gold/red pill styling as the status pill above.
-function activityPillClass(level) {
-if (level === "Active") return "status-active";
-if (level === "Semi-Active") return "status-loa";
-return "status-inactive";
-}
-function renderActivityCell(level) {
-return `<span class="status-pill ${activityPillClass(level)}">${escapeHtml(level || "Inactive")}</span>`;
-}
-// Tracks the in-flight Roster fetch so "View Roster" (see
-// renderSubdivisionDocPage below) can wait for it before scrolling —
-// without this, clicking the button while the roster is still loading
-// (or before it's decided there's nothing to show) would try to jump to
-// a section that's still display:none and silently do nothing.
-let rosterLoadPromise = null;
-async function loadSubdivisionRoster(sub) {
-const section = document.getElementById("roster-section");
-const grid = document.getElementById("roster-grid");
-try {
-const res = await fetch(`/api/roster?div=${encodeURIComponent(sub.slug)}`, { cache: "no-store" });
-const data = await res.json().catch(() => ({}));
-const entries = data.entries || [];
-if (!entries.length) {
-section.style.display = "none";
-return;
-}
-document.getElementById("roster-subtitle").textContent =
-`${entries.length} member${entries.length === 1 ? "" : "s"} on the current ${sub.short} roster, kept up to date by command staff.`;
-const rows = entries
-.map(
-(e) => `
-<tr>
-<td class="rt-rank">${e.rank ? escapeHtml(e.rank) : `<span class="rt-empty">&mdash;</span>`}</td>
-<td>${escapeHtml(e.badgeNumber)}</td>
-<td class="rt-name">${e.characterName ? escapeHtml(e.characterName) : `<span class="rt-empty">Not on Master Roster</span>`}</td>
-<td class="rt-discord">${e.discordId ? escapeHtml(e.discordId) : `<span class="rt-empty">&mdash;</span>`}</td>
-<td>${renderStatusCell(e.departmentStatus)}</td>
-<td class="rt-num">${e.hoursLogged || 0}</td>
-<td class="rt-num">${e.activations || 0}</td>
-<td>${renderActivityCell(e.activityLevel)}</td>
-<td class="rt-notes">${e.notes ? escapeHtml(e.notes) : ""}</td>
-</tr>
-`
-)
-.join("");
-grid.innerHTML = `
-<div class="roster-table-wrap">
-<table class="roster-table">
-<thead>
-<tr>
-<th>Rank</th>
-<th>Badge #</th>
-<th>Name</th>
-<th>Discord ID</th>
-<th>Department Status</th>
-<th>Hours</th>
-<th>Activations</th>
-<th>Activity</th>
-<th>Notes</th>
-</tr>
-</thead>
-<tbody>${rows}</tbody>
-</table>
-</div>
-`;
-section.style.display = "";
-} catch {
-section.style.display = "none";
-}
-}
-// Scrolls to the Roster table once it's actually loaded and visible —
-// used by the "View Roster" document card instead of a plain #anchor
-// link, which would just silently no-op if clicked before the async
-// roster fetch above finishes (or land under the sticky header without
-// the scroll-margin-top on #roster-section in assets/style.css).
-async function scrollToRoster(event) {
-if (event) event.preventDefault();
-if (rosterLoadPromise) {
-try {
-await rosterLoadPromise;
-} catch {}
-}
-const section = document.getElementById("roster-section");
-if (section && section.style.display !== "none") {
-section.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-}
 async function renderSubdivisionDocPage(sub) {
 document.getElementById("doc-breadcrumb").innerHTML =
 `<a href="index.html">Home</a> / <a href="documents.html">Master Documents</a> / ${escapeHtml(sub.name)}`;
@@ -199,7 +85,6 @@ document.title = sub.name + " Documents — BCSO";
 document.getElementById("doc-subtitle").textContent =
 "Documents specific to the " + sub.name + ", kept up to date by its own command staff.";
 document.getElementById("sub-doc-section").style.display = "none";
-rosterLoadPromise = loadSubdivisionRoster(sub);
 const grid = document.getElementById("doc-grid");
 grid.innerHTML = "Loading…";
 try {
@@ -212,19 +97,18 @@ return;
 }
 grid.innerHTML = docs.map((d) => {
 // "Main Roster" is a special case: it used to link out to the old
-// Master Roster spreadsheet, but that's been replaced by the live
-// Roster table above (Character Name/Discord ID/Department
-// Status/Hours/Activations/Activity all resolved automatically) — so
-// instead of opening the old document, it jumps down to that table
-// on this same page. Matched by name only; the actual url stored for
-// this document (Command Access -> Documents) is unused in this case.
+// Master Roster spreadsheet, but that's been replaced by this
+// subdivision's own dedicated Roster page (roster.html?div=slug) — so
+// instead of opening the old document, it navigates there. Matched by
+// name only; the actual url stored for this document (Command Access
+// -> Documents) is unused in this case.
 const isMainRoster = (d.name || "").trim().toLowerCase() === "main roster";
 if (isMainRoster) {
 return `
 <div class="panel sub-card">
 <h3>${escapeHtml(d.name)}</h3>
 <p>${escapeHtml(d.description)}</p>
-<a class="btn btn-gold" href="#roster-section" onclick="scrollToRoster(event)">View Roster</a>
+<a class="btn btn-gold" href="roster.html?div=${encodeURIComponent(sub.slug)}">View Roster</a>
 </div>
 `;
 }

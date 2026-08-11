@@ -3,8 +3,9 @@
  * /api/admin/roster
  *
  * Lets a subdivision's command-role holders manage that subdivision's
- * Roster — shown publicly on that subdivision's Documents page
- * (documents.html?div=slug). Every subdivision has one, including SRT.
+ * Roster — shown publicly on that subdivision's own Roster page
+ * (roster.html?div=slug, linked from its Documents page). Every
+ * subdivision has one, including SRT.
  *
  * Each entry only stores Rank + Badge Number (+ optional Notes) and a
  * manual sort order — Character Name, Discord ID, and Department Status

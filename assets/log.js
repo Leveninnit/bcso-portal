@@ -37,6 +37,15 @@
   // (Command Access -> Activity Logs -> Ranks), swap the free-text Rank
   // field for a dropdown built from those options. Otherwise the
   // original text field stays exactly as it always has.
+  // Tracks whether setupRankField's fetch (below) has finished, so
+  // applySubmitterAutofill can wait for it before deciding whether the
+  // plain text #rank field or the #rank-select dropdown is the one to
+  // fill in -- without this, a member who blurs the Discord ID field
+  // quickly (autofill firing before this fetch resolves) could have their
+  // fetched rank written into the text field right before this function
+  // swaps it out for an empty dropdown, silently losing the value.
+  let rankFieldReady = Promise.resolve();
+
   async function setupRankField(slug) {
     const textInput = document.getElementById("rank");
     const select = document.getElementById("rank-select");
@@ -153,7 +162,16 @@
 
   function addRecruitRow(group) {
     const list = document.getElementById(group.listId);
-    const index = list.querySelectorAll(".rtd-recruit-input").length + 1;
+    // Monotonically increasing per group, never reused -- basing this on
+    // the current element count instead (the old behavior) meant adding
+    // two rows (#2, #3) and then removing #2 made the *next* add compute
+    // count=2 again and re-mint id "...2", except now #3 was still on the
+    // page, giving two different rows the same id/for pair. Counting up
+    // forever avoids that regardless of what gets removed in between.
+    if (group.nextIndex === undefined) {
+      group.nextIndex = list.querySelectorAll(".rtd-recruit-input").length;
+    }
+    const index = ++group.nextIndex;
     const inputId = `${group.prefix}${index}`;
     const row = document.createElement("div");
     row.className = "rtd-recruit-row";
@@ -206,6 +224,24 @@
     Object.values(RECRUIT_GROUPS).forEach((group) => {
       document.getElementById(group.addBtnId).addEventListener("click", () => addRecruitRow(group));
       document.getElementById(group.typeId).addEventListener("change", updateRtdBranch);
+    });
+  }
+
+  // form.reset() (called after a successful submit) resets the *values*
+  // of real form inputs, but it doesn't remove DOM nodes -- so any extra
+  // recruit rows a member added during that submission used to stick
+  // around, empty, cluttering the form for their next entry. This strips
+  // every row back down to each group's single static first row (the one
+  // baked into log.html, with no Remove button) and resets the id counter
+  // so freshly added rows start numbering from 2 again.
+  function resetRecruitLists() {
+    Object.values(RECRUIT_GROUPS).forEach((group) => {
+      const list = document.getElementById(group.listId);
+      list.querySelectorAll(".rtd-recruit-remove").forEach((btn) => {
+        const row = btn.closest(".rtd-recruit-row");
+        if (row) row.remove();
+      });
+      group.nextIndex = undefined;
     });
   }
 
@@ -298,7 +334,7 @@
     const slugValue = document.getElementById("subdivisionSlug").value;
     renderCustomQuestions(slugValue);
     applyFieldLabelOverrides(slugValue);
-    setupRankField(slugValue);
+    rankFieldReady = setupRankField(slugValue);
 
     setupRecruitLists();
     setRtdMode(isRtdSlug(slugValue));
@@ -324,11 +360,24 @@
   // below). This is a convenience only — any failure (roster not
   // configured, no match, network error) just leaves the fields as-is
   // for manual entry.
-  function applySubmitterAutofill(data) {
+  async function applySubmitterAutofill(data) {
     const note = document.getElementById("autofill-note");
-    if (data.name) document.getElementById("characterName").value = data.name;
-    if (data.badgeNumber) document.getElementById("badgeNumber").value = data.badgeNumber;
-    if (data.discordId) document.getElementById("discordId").value = data.discordId;
+    // Only claim "Auto-filled" if something was actually filled in -- see
+    // the same fix in apply.js's handleDiscordIdBlur for why (a matched
+    // roster row can still have every relevant field blank).
+    let filledSomething = false;
+    if (data.name) {
+      document.getElementById("characterName").value = data.name;
+      filledSomething = true;
+    }
+    if (data.badgeNumber) {
+      document.getElementById("badgeNumber").value = data.badgeNumber;
+      filledSomething = true;
+    }
+    if (data.discordId) {
+      document.getElementById("discordId").value = data.discordId;
+      filledSomething = true;
+    }
     if (data.rank) {
       const slug = document.getElementById("subdivisionSlug").value;
       if (isRtdSlug(slug)) {
@@ -336,14 +385,35 @@
         const match = Array.from(rtdRank.options).find(
           (o) => o.value.toLowerCase() === data.rank.toLowerCase()
         );
-        if (match) rtdRank.value = match.value;
+        if (match) {
+          rtdRank.value = match.value;
+          filledSomething = true;
+        }
       } else {
-        document.getElementById("rank").value = data.rank;
+        // Wait for setupRankField's fetch to finish before checking which
+        // field is actually showing right now -- see rankFieldReady above.
+        await rankFieldReady;
+        const rankSelect = document.getElementById("rank-select");
+        const usingDropdown = rankSelect && rankSelect.style.display !== "none";
+        if (usingDropdown) {
+          const match = Array.from(rankSelect.options).find(
+            (o) => o.value.toLowerCase() === data.rank.toLowerCase()
+          );
+          if (match) {
+            rankSelect.value = match.value;
+            filledSomething = true;
+          }
+        } else {
+          document.getElementById("rank").value = data.rank;
+          filledSomething = true;
+        }
       }
     }
-    note.textContent = "✓ Auto-filled from Master Roster";
-    note.style.color = "var(--success)";
-    note.style.display = "inline";
+    if (filledSomething) {
+      note.textContent = "✓ Auto-filled from Master Roster";
+      note.style.color = "var(--success)";
+      note.style.display = "inline";
+    }
   }
 
   async function handleDiscordIdBlur() {
@@ -354,7 +424,7 @@
     try {
       const res = await fetch("/api/roster-lookup?discordId=" + encodeURIComponent(discordId));
       const data = await res.json().catch(() => ({}));
-      if (data.found) applySubmitterAutofill(data);
+      if (data.found) await applySubmitterAutofill(data);
     } catch {
       // Roster lookup is a convenience — ignore failures quietly.
     }
@@ -368,7 +438,7 @@
     try {
       const res = await fetch("/api/roster-lookup?badgeNumber=" + encodeURIComponent(badgeNumber));
       const data = await res.json().catch(() => ({}));
-      if (data.found) applySubmitterAutofill(data);
+      if (data.found) await applySubmitterAutofill(data);
     } catch {
       // Roster lookup is a convenience — ignore failures quietly.
     }
@@ -473,6 +543,25 @@
       return;
     }
 
+    // Each duration field (hours/minutes/seconds) has its own min/max on
+    // the input, but nothing stopped e.g. 20 hours + 50 minutes from
+    // passing per-field checks while still exceeding a real 24h shift --
+    // that combined total is only enforced server-side, so it used to
+    // surface as a late, confusing rejection after everything else looked
+    // fine. Mirror the server's check here so it's caught immediately.
+    const isDiscordRecruitment =
+      rtd && payload.rtd.role === "host" && payload.rtd.hostType === "Discord Recruitment";
+    if (!isDiscordRecruitment) {
+      const h = Number(payload.durationHours) || 0;
+      const m = Number(payload.durationMinutes) || 0;
+      const s = Number(payload.durationSeconds) || 0;
+      const totalSeconds = h * 3600 + m * 60 + s;
+      if (totalSeconds <= 0 || totalSeconds > 24 * 3600) {
+        showAlert(errorEl, "Duration must be between 1 second and 24 hours.");
+        return;
+      }
+    }
+
     submitBtn.disabled = true;
     const originalText = submitBtn.textContent;
     submitBtn.innerHTML = '<span class="spinner"></span> Submitting…';
@@ -490,6 +579,7 @@
         return;
       }
       form.reset();
+      resetRecruitLists();
       setRtdMode(rtd);
       showAlert(successEl);
       submitBtn.textContent = originalText;

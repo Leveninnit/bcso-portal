@@ -103,6 +103,7 @@ header.site-header {
 }
 nav.main-nav {
   display: flex;
+  align-items: center;
   gap: 1.5rem;
   flex-wrap: wrap;
 }
@@ -1185,7 +1186,10 @@ nav.main-nav a:hover {
   justify-content: center;
   width: 34px;
   height: 34px;
-  margin-left: 0.5rem;
+  /* Lives inside nav.main-nav now (see effects.js) -- auto margin pushes
+     it to the far right of the nav's own flex row instead of sitting
+     inline after the last nav link. */
+  margin-left: auto;
   border-radius: 50%;
   border: 1px solid var(--panel-border);
   background: rgba(255, 255, 255, 0.03);

@@ -20,7 +20,7 @@ function renderHeader() {
   const active = currentPage();
   const links = NAV_LINKS.map(
     (l) =>
-      `<a href="${l.href}"${l.href === active ? ' class="active"' : ""}>${l.label}</a>`
+      `<a href="${l.href}"${l.href === active ? ' class="active" aria-current="page"' : ""}>${l.label}</a>`
   ).join("");
   return `
   <header class="site-header">

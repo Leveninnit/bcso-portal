@@ -63,8 +63,15 @@ async function loadTeam() {
   statusEl.textContent = "Loading…";
   try {
     const res = await fetch("/api/team", { cache: "no-store" });
+    // A non-OK response (500, etc.) used to fall through to the same
+    // `data && data.roster` fallback as a genuinely empty roster, so a
+    // broken backend silently rendered as "Position Vacant" x5 with no
+    // hint anything was wrong. Treat "the request failed" and "the
+    // request succeeded with nothing in it" as different cases.
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
     const data = await res.json().catch(() => null);
-    renderRoster((data && data.roster) || []);
+    if (!data) throw new Error("Invalid response body");
+    renderRoster(data.roster || []);
     statusEl.textContent = "";
   } catch {
     renderRoster([]);

@@ -171,10 +171,24 @@
       const res = await fetch("/api/roster-lookup?discordId=" + encodeURIComponent(discordId));
       const data = await res.json().catch(() => ({}));
       if (data.found) {
-        if (data.name) document.getElementById("characterName").value = data.name;
-        if (data.badgeNumber) document.getElementById("badgeNumber").value = data.badgeNumber;
-        if (data.rank) document.getElementById("rank").value = data.rank;
-        if (note) {
+        // Only claim "Auto-filled" if something was actually filled in --
+        // a roster row can match (found: true) but have every field the
+        // form cares about blank, in which case this used to show a
+        // reassuring "✓ Auto-filled" message that was simply untrue.
+        let filledSomething = false;
+        if (data.name) {
+          document.getElementById("characterName").value = data.name;
+          filledSomething = true;
+        }
+        if (data.badgeNumber) {
+          document.getElementById("badgeNumber").value = data.badgeNumber;
+          filledSomething = true;
+        }
+        if (data.rank) {
+          document.getElementById("rank").value = data.rank;
+          filledSomething = true;
+        }
+        if (note && filledSomething) {
           note.textContent = "✓ Auto-filled from Master Roster";
           note.style.color = "var(--success)";
           note.style.display = "inline";

@@ -115,11 +115,21 @@ async function loadAdmin() {
       gridEl.style.display = "none";
       return;
     }
+    // A server error here used to fall through to the same rendering path
+    // as "you're allowed in, and the roster happens to be empty" -- so a
+    // 500 rendered 5 blank, perfectly saveable cards. Someone hitting
+    // "Save Slot" on one without noticing would then overwrite that
+    // slot's real data with blanks. Refuse to render editable (and
+    // save-able) fields at all when the load itself didn't actually
+    // succeed.
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
     const data = await res.json().catch(() => null);
+    if (!data) throw new Error("Invalid response body");
     statusEl.textContent = "";
-    renderSlots((data && data.roster) || []);
+    renderSlots(data.roster || []);
   } catch {
-    statusEl.textContent = "Couldn't load the roster right now. Try refreshing.";
+    statusEl.textContent = "Couldn't load the roster right now — try refreshing before making changes.";
+    gridEl.style.display = "none";
   }
 }
 

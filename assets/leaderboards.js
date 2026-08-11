@@ -21,6 +21,12 @@ let currentData = {
   subdivisions: { byHours: [], byCount: [] },
   log: [],
 };
+// Bumped on every loadLeaderboard() call; a response only gets applied if
+// it's still the most recent request by the time it comes back. Without
+// this, rapidly clicking through tabs/periods could let an earlier,
+// slower response land *after* a later, faster one and overwrite it with
+// stale data -- the board would end up showing the wrong tab's numbers.
+let requestSeq = 0;
 
 function getQueryParam(name) {
   return new URLSearchParams(window.location.search).get(name);
@@ -221,29 +227,74 @@ function renderAll() {
   renderLogList(query);
 }
 
+// D1 stores created_at in UTC (datetime('now')). Without this, "This
+// Month" was always a UTC calendar month, so anyone west of UTC could
+// see a log from their own last few hours of the month missing (already
+// counted as "next month" by the server's clock), or vice versa for
+// anyone east of UTC. Converts the viewer's own local calendar month
+// into its UTC-equivalent boundaries, in the same "YYYY-MM-DD HH:MM:SS"
+// shape D1's created_at column uses, so the server can filter by it
+// directly (see functions/api/leaderboard.js's DATETIME_RE).
+function localMonthBoundsUtc() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
+  const end = new Date(now.getFullYear(), now.getMonth() + 1, 1, 0, 0, 0);
+  const fmt = (d) => d.toISOString().slice(0, 19).replace("T", " ");
+  return { start: fmt(start), end: fmt(end) };
+}
+
 async function loadLeaderboard() {
   const statusEl = document.getElementById("lb-status");
   statusEl.textContent = "Loading…";
+  const mySeq = ++requestSeq;
   try {
     const params = new URLSearchParams();
     if (currentDiv !== "all") params.set("div", currentDiv);
     params.set("period", currentPeriod);
+    if (currentPeriod === "month") {
+      const { start, end } = localMonthBoundsUtc();
+      params.set("monthStart", start);
+      params.set("monthEnd", end);
+    }
     const res = await fetch(`/api/leaderboard?${params.toString()}`, { cache: "no-store" });
+    // A failed request used to fall through to the exact same fallback as
+    // a genuinely empty leaderboard (no data yet), silently clearing the
+    // status message as if it had succeeded. Now it's treated as a real
+    // error instead.
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
     const data = await res.json().catch(() => null);
-    currentData =
-      data && data.leaderboard
-        ? {
-            leaderboard: data.leaderboard,
-            subdivisions: data.subdivisions || { byHours: [], byCount: [] },
-            log: data.log || [],
-          }
-        : { leaderboard: { byHours: [], byCount: [] }, subdivisions: { byHours: [], byCount: [] }, log: [] };
+    if (!data || !data.leaderboard) throw new Error("Invalid response body");
+    if (mySeq !== requestSeq) return; // a newer request has since started; drop this stale response
+    currentData = {
+      leaderboard: data.leaderboard,
+      subdivisions: data.subdivisions || { byHours: [], byCount: [] },
+      log: data.log || [],
+    };
     statusEl.textContent = "";
   } catch {
+    if (mySeq !== requestSeq) return;
     currentData = { leaderboard: { byHours: [], byCount: [] }, subdivisions: { byHours: [], byCount: [] }, log: [] };
     statusEl.textContent = "Couldn't load the leaderboard right now. Try refreshing.";
   }
+  if (mySeq !== requestSeq) return;
   renderAll();
+}
+
+// Reflects the current div/period in the URL (?div=&period=) via
+// pushState, so the back/forward buttons step through tab/period changes
+// and a link to a specific view (e.g. shared in Discord) opens on that
+// same view instead of always resetting to Global/All-Time.
+function syncUrlState() {
+  const params = new URLSearchParams(window.location.search);
+  if (currentDiv === "all") params.delete("div");
+  else params.set("div", currentDiv);
+  if (currentPeriod === "all") params.delete("period");
+  else params.set("period", currentPeriod);
+  const query = params.toString();
+  const newUrl = window.location.pathname + (query ? `?${query}` : "");
+  if (newUrl !== window.location.pathname + window.location.search) {
+    window.history.pushState({ div: currentDiv, period: currentPeriod }, "", newUrl);
+  }
 }
 
 function renderDivTabs() {
@@ -262,6 +313,7 @@ function renderDivTabs() {
       currentDiv = btn.dataset.div;
       tabsEl.querySelectorAll(".lb-tab").forEach((b) => b.classList.toggle("active", b === btn));
       updateTitle();
+      syncUrlState();
       loadLeaderboard();
     });
   });
@@ -280,6 +332,7 @@ function wirePeriodToggle() {
       if (btn.dataset.period === currentPeriod) return;
       currentPeriod = btn.dataset.period;
       toggleEl.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b === btn));
+      syncUrlState();
       loadLeaderboard();
     });
   });
@@ -289,15 +342,33 @@ function wireSearch() {
   document.getElementById("lb-search").addEventListener("input", () => renderAll());
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+// Sets the div/period tabs to whatever the URL says (defaulting to
+// Global/All-Time) and re-renders/re-fetches to match -- shared between
+// the initial page load and the browser's back/forward navigation.
+function applyStateFromUrl() {
   const wantDiv = (getQueryParam("div") || "all").toLowerCase();
-  const validDiv =
-    wantDiv === "all" || (window.SUBDIVISIONS || []).some((s) => s.slug === wantDiv);
+  const validDiv = wantDiv === "all" || (window.SUBDIVISIONS || []).some((s) => s.slug === wantDiv);
   currentDiv = validDiv ? wantDiv : "all";
+  const wantPeriod = (getQueryParam("period") || "all").toLowerCase();
+  currentPeriod = wantPeriod === "month" ? "month" : "all";
 
+  document.querySelectorAll("#lb-div-tabs .lb-tab").forEach((b) => b.classList.toggle("active", b.dataset.div === currentDiv));
+  document
+    .querySelectorAll("#lb-period-toggle button")
+    .forEach((b) => b.classList.toggle("active", b.dataset.period === currentPeriod));
+  updateTitle();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  applyStateFromUrl();
   renderDivTabs();
   updateTitle();
   wirePeriodToggle();
   wireSearch();
+  loadLeaderboard();
+});
+
+window.addEventListener("popstate", () => {
+  applyStateFromUrl();
   loadLeaderboard();
 });

@@ -7,6 +7,21 @@
  * without High Command) — this page just reflects those responses.
  */
 
+// Same escaping team-admin.js uses -- needed here for the same reason:
+// renderPhotoRows below builds HTML via template string and assigns it
+// through innerHTML, so any unescaped value (a saved photo caption/URL
+// containing a `"` or `<`) could break out of its attribute and inject
+// live markup/script into this admin page.
+function escapeHtml(str) {
+  return (str ?? "").toString().replace(/[&<>"']/g, (c) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    '"': "&quot;",
+    "'": "&#39;",
+  }[c]));
+}
+
 function subdivisionOptions(selected) {
   const subs = window.SUBDIVISIONS || [];
   const blank = `<option value=""${selected ? "" : " selected"}>— None —</option>`;
@@ -15,7 +30,7 @@ function subdivisionOptions(selected) {
     subs
       .map(
         (s) =>
-          `<option value="${s.slug}"${s.slug === selected ? " selected" : ""}>${s.name || s.short}</option>`
+          `<option value="${escapeHtml(s.slug)}"${s.slug === selected ? " selected" : ""}>${escapeHtml(s.name || s.short)}</option>`
       )
       .join("")
   );
@@ -31,8 +46,8 @@ function renderPhotoRows(photos) {
     rows.push(`
       <div class="panel team-admin-card" data-photo-index="${i}">
         <h2>Photo ${i + 1}</h2>
-        <label>Image URL<input type="text" class="hoa-photo-url" value="${p.url || ""}" maxlength="500" placeholder="https://…" /></label>
-        <label>Caption<input type="text" class="hoa-photo-caption" value="${p.caption || ""}" maxlength="200" /></label>
+        <label>Image URL<input type="text" class="hoa-photo-url" value="${escapeHtml(p.url || "")}" maxlength="500" placeholder="https://…" /></label>
+        <label>Caption<input type="text" class="hoa-photo-caption" value="${escapeHtml(p.caption || "")}" maxlength="200" /></label>
       </div>
     `);
   }
@@ -81,7 +96,13 @@ async function loadAdmin() {
       bodyEl.style.display = "none";
       return;
     }
-    const data = await res.json().catch(() => ({}));
+    // See team-admin.js's loadAdmin for why this can't just fall through
+    // to an empty-object fallback on failure -- that used to render fully
+    // editable, blank fields ready to save right over the real saved
+    // content on the next hiccup.
+    if (!res.ok) throw new Error(`Request failed (${res.status})`);
+    const data = await res.json().catch(() => null);
+    if (!data) throw new Error("Invalid response body");
     statusEl.textContent = "";
     bodyEl.style.display = "";
     fillDeputyForm("week", data.deputyOfWeek);

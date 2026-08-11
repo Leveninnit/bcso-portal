@@ -88,6 +88,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         missing_code: "Login didn't complete — please try again.",
         login_failed: "Something went wrong logging you in. Please try again in a moment.",
         access_denied: "Discord login was cancelled.",
+        invalid_state: "Your login session expired or looked suspicious, so it was rejected for your safety — please try logging in again.",
       };
       const box = el("ca-error");
       box.textContent = messages[error] || `Login error: ${error}`;
@@ -121,6 +122,27 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     // authorization-granted cue.
     if (window.BCSOEffects) window.BCSOEffects.playAuthGranted();
     el("ca-whoami").textContent = `Logged in as ${me.username}`;
+    // Logout used to be a plain <a href="/api/auth/logout"> GET link,
+    // which meant any third-party page could force it via something as
+    // simple as <img src="https://.../api/auth/logout"> -- the browser
+    // still honors a Set-Cookie clearing the session from that response
+    // even though SameSite=Lax stops the *original* cookie from being
+    // sent cross-site. Logout is now POST-only (see logout.js) and
+    // requires this in-page click, which a cross-origin <img>/<a> can't
+    // trigger.
+    const logoutBtn = el("ca-logout-btn");
+    if (logoutBtn) {
+      logoutBtn.addEventListener("click", async () => {
+        logoutBtn.disabled = true;
+        try {
+          await fetch("/api/auth/logout", { method: "POST" });
+        } catch {
+          // Even if the request fails, still send them to the homepage --
+          // worst case they're still logged in and can try again.
+        }
+        window.location.href = "index.html";
+      });
+    }
     mySubdivisions = me.subdivisions || [];
 
     if (!mySubdivisions.length) {
@@ -306,7 +328,11 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     if (!o) return;
     if (action === "delete") {
       if (!confirm(`Delete rank "${o.label}"?`)) return;
-      await fetch(`/api/admin/rank-options?id=${o.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/rank-options?id=${o.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+      if (!res.ok) {
+        alert("Couldn't delete that rank. Please try again.");
+        return;
+      }
       loadRankOptions();
       return;
     }
@@ -493,7 +519,11 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     if (!e) return;
     if (action === "delete") {
       if (!confirm(`Remove Badge ${e.badgeNumber} from the roster?`)) return;
-      await fetch(`/api/admin/roster?id=${e.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/roster?id=${e.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+      if (!res.ok) {
+        alert("Couldn't remove that roster entry. Please try again.");
+        return;
+      }
       loadRosterEntries();
       return;
     }
@@ -699,18 +729,68 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     }
   }
 
+  // Submissions list used to hard-cap at whatever the server's own LIMIT
+  // was (200), with nothing past that reachable from the dashboard at
+  // all. Now paginated: loadSubmissions(status) loads/replaces page 1 as
+  // before, and a "Load more" button (appended when the server reports
+  // hasMore) fetches the next page and appends it instead of re-fetching
+  // everything from the start.
+  async function fetchSubmissionsPage(slug, type, status, offset) {
+    const url = `/api/admin/submissions?div=${encodeURIComponent(slug)}&type=${type}${status ? `&status=${status}` : ""}&offset=${offset}`;
+    const res = await fetch(url, { cache: "no-store" });
+    if (!res.ok) throw new Error("request failed");
+    return res.json();
+  }
+
+  function wireSubmissionActions(list, slug, status) {
+    list.querySelectorAll("[data-action]").forEach((btn) => {
+      if (btn.dataset.wired) return;
+      btn.dataset.wired = "1";
+      btn.addEventListener("click", () => handleSubmissionAction(btn.dataset.action, btn.dataset.id, slug, status));
+    });
+  }
+
+  function renderLoadMoreButton(list, slug, type, status, nextOffset) {
+    const old = list.parentElement.querySelector(".ca-load-more");
+    if (old) old.remove();
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "ca-btn-accept ca-load-more";
+    btn.style.marginTop = "1rem";
+    btn.textContent = "Load more";
+    btn.addEventListener("click", async () => {
+      btn.disabled = true;
+      btn.textContent = "Loading…";
+      try {
+        const data = await fetchSubmissionsPage(slug, type, status, nextOffset);
+        const labels = await loadQuestionLabels(slug, type);
+        const html = (data.submissions || []).map((s) => renderSubmissionCard(s, labels)).join("");
+        list.insertAdjacentHTML("beforeend", html);
+        wireSubmissionActions(list, slug, status);
+        if (data.hasMore) {
+          renderLoadMoreButton(list, slug, type, status, data.nextOffset);
+        } else {
+          btn.remove();
+        }
+      } catch {
+        btn.disabled = false;
+        btn.textContent = "Couldn't load more — try again";
+      }
+    });
+    list.insertAdjacentElement("afterend", btn);
+  }
+
   async function loadSubmissions(status) {
     const list = el("ca-submission-list");
     if (!list) return;
     list.innerHTML = "Loading…";
+    const existingLoadMore = list.parentElement.querySelector(".ca-load-more");
+    if (existingLoadMore) existingLoadMore.remove();
     const slug = activeSlug;
     const type = activeFormType;
   const highlightId = pendingHighlight;
     try {
-      const url = `/api/admin/submissions?div=${encodeURIComponent(slug)}&type=${type}${status ? `&status=${status}` : ""}`;
-      const res = await fetch(url, { cache: "no-store" });
-      if (!res.ok) throw new Error("request failed");
-      const data = await res.json();
+      const data = await fetchSubmissionsPage(slug, type, status, 0);
       const labels = await loadQuestionLabels(slug, type);
       if (!data.submissions || !data.submissions.length) {
         list.innerHTML = `<p class="ca-muted">Nothing here.</p>`;
@@ -718,9 +798,10 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       return;
       }
       list.innerHTML = data.submissions.map((s) => renderSubmissionCard(s, labels)).join("");
-      list.querySelectorAll("[data-action]").forEach((btn) => {
-        btn.addEventListener("click", () => handleSubmissionAction(btn.dataset.action, btn.dataset.id, slug, status));
-      });
+      wireSubmissionActions(list, slug, status);
+      if (data.hasMore) {
+        renderLoadMoreButton(list, slug, type, status, data.nextOffset);
+      }
     if (highlightId) {
       const card = list.querySelector(`[data-subid="${highlightId}"]`);
       if (card) {
@@ -782,15 +863,34 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   }
 
   async function handleSubmissionAction(action, id, slug, status) {
+    // Neither branch used to check res.ok -- a failed delete/decide
+    // (session expired, someone else already decided it, a network hiccup)
+    // silently fell through to loadSubmissions() as if it had worked, with
+    // no indication to whoever clicked the button that nothing actually
+    // happened.
     if (action === "delete") {
       if (!confirm("Delete this submission permanently? This can't be undone.")) return;
-      await fetch(`/api/admin/submissions?id=${id}&div=${encodeURIComponent(slug)}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/submissions?id=${id}&div=${encodeURIComponent(slug)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        alert((data && data.error) || "Couldn't delete that submission. Please try again.");
+        return;
+      }
     } else {
-      await fetch("/api/admin/submissions", {
+      const res = await fetch("/api/admin/submissions", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id: Number(id), subdivisionSlug: slug, status: action === "accept" ? "accepted" : "rejected" }),
       });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        alert((data && data.error) || "Couldn't save that decision. Please try again.");
+        // Refresh anyway -- e.g. a 409 means someone else already decided
+        // this one (see the status='pending' guard on the server), so the
+        // list should still pick up its real current status.
+        loadSubmissions(status);
+        return;
+      }
     }
     loadSubmissions(status);
   }
@@ -925,7 +1025,11 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     if (!q) return;
     if (action === "delete") {
       if (!confirm(`Delete question "${q.label}"? This can't be undone.`)) return;
-      await fetch(`/api/admin/questions?id=${q.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/questions?id=${q.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+      if (!res.ok) {
+        alert("Couldn't delete that question. Please try again.");
+        return;
+      }
       loadQuestions();
       return;
     }
@@ -1110,7 +1214,11 @@ async function handleDocumentAction(action, documents, did) {
   if (!d) return;
   if (action === "delete") {
     if (!confirm(`Delete document "${d.name}"? This can't be undone.`)) return;
-    await fetch(`/api/admin/documents?id=${d.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+    const res = await fetch(`/api/admin/documents?id=${d.id}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+    if (!res.ok) {
+      alert("Couldn't delete that document. Please try again.");
+      return;
+    }
     loadDocuments();
     return;
   }
@@ -1619,7 +1727,11 @@ function renderDocumentForm(editing) {
     if (!t) return;
     if (action === "delete") {
       if (!confirm(`Delete template "${t.name}"? This can't be undone.`)) return;
-      await fetch(`/api/admin/movement-templates?id=${t.id}${scope ? `&div=${encodeURIComponent(scope)}` : ""}`, { method: "DELETE" });
+      const res = await fetch(`/api/admin/movement-templates?id=${t.id}${scope ? `&div=${encodeURIComponent(scope)}` : ""}`, { method: "DELETE" });
+      if (!res.ok) {
+        alert("Couldn't delete that template. Please try again.");
+        return;
+      }
       movementTemplatesCacheByScope = {};
       await loadMovementTemplateList(scope);
       return;

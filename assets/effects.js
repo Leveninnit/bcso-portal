@@ -261,7 +261,16 @@
   // Sound on/off toggle, injected into the header once main.js mounts it.
   // ------------------------------------------------------------------
   function setupSoundToggle() {
-    const nav = document.querySelector("header.site-header .container");
+    // Appends into nav.main-nav itself, NOT header.site-header .container.
+    // .container is styled `display: flex; justify-content: space-between`
+    // expecting exactly its two existing children (.brand and nav.main-nav)
+    // -- adding this button as a THIRD direct child there used to throw
+    // off that space-between split (three items sharing the gap instead
+    // of two), shifting the nav links away from the right edge. Making
+    // the button a flex item *inside* nav.main-nav instead (pushed to the
+    // end via margin-left: auto in style.css) keeps .container's layout
+    // exactly as before while still landing the button at the far right.
+    const nav = document.querySelector("header.site-header .main-nav");
     if (!nav || document.getElementById("bcso-sound-toggle")) return;
     const btn = document.createElement("button");
     btn.type = "button";

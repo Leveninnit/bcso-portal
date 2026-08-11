@@ -47,9 +47,40 @@
   let rankFieldReady = Promise.resolve();
 
   async function setupRankField(slug) {
+    if (!slug || slug === "general") return;
+    if (slug === "rtd") {
+      // RTD has its own dedicated select (#rtdRank) instead of the
+      // generic #rank/#rank-select pair above, since it's always a
+      // required dropdown (never free text) and setRtdMode/handleSubmit
+      // depend on that element existing. If command staff have
+      // configured custom Rank options for RTD (Command Access -> RTD ->
+      // Ranks), those replace the built-in 4-option list below;
+      // otherwise the built-in list -- which the Master Roster sheet's
+      // Activation Log formulas expect -- stays exactly as it was.
+      try {
+        const res = await fetch(`/api/rank-options?div=rtd`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        const options = data.options || [];
+        if (!options.length) return;
+        const rtdRank = document.getElementById("rtdRank");
+        const currentValue = rtdRank.value;
+        rtdRank.innerHTML =
+          `<option value="">Select…</option>` +
+          options.map((o) => `<option value="${escapeHtml(o)}">${escapeHtml(o)}</option>`).join("");
+        // Preserve whatever was already selected (e.g. from the
+        // submitter autofill) if it's still one of the options after
+        // the swap.
+        if (currentValue && Array.from(rtdRank.options).some((o) => o.value === currentValue)) {
+          rtdRank.value = currentValue;
+        }
+      } catch {
+        // Custom rank options are an enhancement — if they fail to load,
+        // keep the built-in RTD list.
+      }
+      return;
+    }
     const textInput = document.getElementById("rank");
     const select = document.getElementById("rank-select");
-    if (!slug || slug === "general" || slug === "rtd") return; // RTD uses its own dedicated rank dropdown
     try {
       const res = await fetch(`/api/rank-options?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
       const data = await res.json().catch(() => ({}));
@@ -381,6 +412,14 @@
     if (data.rank) {
       const slug = document.getElementById("subdivisionSlug").value;
       if (isRtdSlug(slug)) {
+        // Wait for setupRankField's fetch to finish first -- now that
+        // RTD's dropdown can also be swapped out for command-staff-
+        // configured options (see setupRankField), matching against
+        // #rtdRank's options before that swap finishes risks the same
+        // "autofill wins the race, then gets silently reset when the
+        // custom list replaces it" bug the non-RTD branch below already
+        // guards against with this same await.
+        await rankFieldReady;
         const rtdRank = document.getElementById("rtdRank");
         const match = Array.from(rtdRank.options).find(
           (o) => o.value.toLowerCase() === data.rank.toLowerCase()

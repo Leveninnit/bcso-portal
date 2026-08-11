@@ -5,11 +5,13 @@
  *
  * name        - display name
  * description - shown on the document card
- * url         - the live Google Doc/Sheet link. Links open in a new tab
- *               so people always see the current version, rather than a
- *               copy that goes stale. The document must be shared as at
- *               least "Anyone with the link - Viewer" for visitors to be
- *               able to open it.
+ * url         - where "Open Document" links to. Usually a live Google
+ *               Doc/Sheet link (opens in a new tab so people always see
+ *               the current version, rather than a copy that goes
+ *               stale) -- the document must be shared as at least "Anyone
+ *               with the link - Viewer" for visitors to be able to open
+ *               it. Can also be a page on this site, like the SOP entry
+ *               below.
  */
 const DOCUMENTS = [
   {
@@ -22,7 +24,10 @@ const DOCUMENTS = [
     name: "Standard Operating Procedure",
     description:
       "The full BCSO SOP — ranks, chain of command, vehicle and uniform policy, training program, and more.",
-    url: "https://docs.google.com/document/d/10-1E-G905Fn8XPIelmPafbPlazCWHSQxwLTzlYTek5U/edit?tab=t.0",
+    // Used to be a Google Doc link. Now lives directly on the site (see
+    // sop.html / sop-admin.html / functions/api/sop.js) so High Command
+    // can paste updated wording in and it's live immediately.
+    url: "sop.html",
   },
 ];
 // Exposed as a global for plain <script> usage across pages.

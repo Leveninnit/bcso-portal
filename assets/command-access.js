@@ -71,6 +71,23 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     }[c]));
   }
 
+  // Same "D1's datetime('now') is UTC without a 'Z'" handling as
+  // assets/leaderboards.js's formatDate. Used by the Roster panel's
+  // "Last updated ... by ..." line (see content_meta).
+  function formatDate(value) {
+    if (!value) return "";
+    const iso = value.includes("T") ? value : value.replace(" ", "T") + "Z";
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return value;
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    });
+  }
+
   // ---------------------------------------------------------------------
   // Emergency Alert — a deliberately loud, single-purpose button for
   // subdivision heads to reach command staff's emergency contact
@@ -362,15 +379,17 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   // ---------------------------------------------------------------------
   async function renderRanksPanel() {
     const panel = el("ca-panel");
+    const rtdNote =
+      "RTD's Activity Log rank dropdown starts out with 4 built-in options (RTD Assistant Field Trainer, RTD Field Trainer, RTD Operation lead, RTD Board of Directors +) that match the Master Roster sheet's Activation Log formulas. Add ranks here to replace that built-in list on RTD's Activity Log and Roster forms — if you do, make sure the wording still matches whatever the sheet's formulas expect (or update the sheet to match), since those formulas key off the exact rank text. Leave this empty to keep the built-in RTD list.";
+    const otherNote = `Add the ranks deputies can pick from on ${subInfo(activeSlug).short}'s Activity Log and Roster forms. Order matters: drag rows to arrange these highest to lowest — it saves as soon as you drop, and this order is used to sort ${subInfo(activeSlug).short}'s Roster and controls what shows up in both Rank dropdowns. Leave this empty to keep the original free-text Rank fields (and manual Roster order).`;
     panel.innerHTML = `
       <div class="panel">
         <p class="ca-section-title">Rank Options</p>
-        <p class="ca-muted">${activeSlug === "rtd" ? "RTD already has its own dedicated Rank dropdown (kept in sync with the Google Sheet) and doesn't use this list." : `Add the ranks deputies can pick from on ${subInfo(activeSlug).short}'s Activity Log and Roster forms. Order matters: drag rows to arrange these highest to lowest — it saves as soon as you drop, and this order is used to sort ${subInfo(activeSlug).short}'s Roster and controls what shows up in both Rank dropdowns. Leave this empty to keep the original free-text Rank fields (and manual Roster order).`}</p>
+        <p class="ca-muted">${activeSlug === "rtd" ? rtdNote : otherNote}</p>
         <div id="ca-rank-list">Loading…</div>
         <div class="ca-question-form" id="ca-add-rank-form"></div>
       </div>
     `;
-    if (activeSlug === "rtd") return;
     renderRankForm();
     await loadRankOptions();
   }
@@ -384,7 +403,10 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       const data = await res.json();
       const options = data.options || [];
       if (!options.length) {
-        list.innerHTML = `<p class="ca-muted">No rank options yet — the form is using the original free-text field.</p>`;
+        list.innerHTML =
+          slug === "rtd"
+            ? `<p class="ca-muted">No custom ranks yet — RTD's form is using its built-in 4-option list.</p>`
+            : `<p class="ca-muted">No rank options yet — the form is using the original free-text field.</p>`;
         return;
       }
       list.innerHTML = options
@@ -556,6 +578,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       <div class="panel">
         <p class="ca-section-title">${subInfo(activeSlug).short} Roster</p>
         <p class="ca-muted">Shown publicly on the ${subInfo(activeSlug).short} Roster page (linked from Documents). Add each member's Rank and Badge Number — their Character Name and Discord ID are pulled automatically from the Master Roster by badge number, so you never have to type or update those here. Drag rows to reorder, exactly how you want the roster to read top to bottom — it saves as soon as you drop.</p>
+        <p class="ca-muted" id="ca-roster-last-updated"></p>
         <div id="ca-roster-list">Loading…</div>
         <div class="ca-question-form" id="ca-add-roster-form"></div>
       </div>
@@ -586,6 +609,13 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       const entries = data.entries || [];
+      const lastUpdatedEl = el("ca-roster-last-updated");
+      if (lastUpdatedEl) {
+        lastUpdatedEl.textContent =
+          data.lastUpdated && data.lastUpdated.at
+            ? `Last updated ${formatDate(data.lastUpdated.at)} by ${data.lastUpdated.by}.`
+            : "";
+      }
       if (!entries.length) {
         list.innerHTML = `<p class="ca-muted">No roster entries yet — add the first one below.</p>`;
         return;

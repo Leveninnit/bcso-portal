@@ -71,6 +71,87 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     }[c]));
   }
 
+  // ---------------------------------------------------------------------
+  // Emergency Alert — a deliberately loud, single-purpose button for
+  // subdivision heads to reach command staff's emergency contact
+  // immediately over Discord DM, for situations that can't wait for a
+  // normal channel post to be seen. Wired once at page load (the button
+  // and modal are static markup in command-access.html, not re-rendered
+  // by renderSubContent), and gated both here (button only shown once
+  // mySubdivisions is known) and server-side (functions/api/admin/
+  // emergency-alert.js re-checks the same "holds a subdivision command
+  // role" requirement — this client-side check is a convenience, not the
+  // actual authorization boundary).
+  // ---------------------------------------------------------------------
+  function setupEmergencyAlert() {
+    const btn = el("ca-emergency-btn");
+    const overlay = el("ca-emergency-overlay");
+    const messageInput = el("ca-emergency-message");
+    const confirmCheckbox = el("ca-emergency-confirm");
+    const sendBtn = el("ca-emergency-send");
+    const cancelBtn = el("ca-emergency-cancel");
+    const statusEl = el("ca-emergency-status");
+    if (!btn || !overlay || !messageInput || !confirmCheckbox || !sendBtn || !cancelBtn || !statusEl) return;
+
+    function openModal() {
+      messageInput.value = "";
+      confirmCheckbox.checked = false;
+      statusEl.textContent = "";
+      sendBtn.disabled = false;
+      overlay.style.display = "flex";
+      messageInput.focus();
+    }
+    function closeModal() {
+      overlay.style.display = "none";
+    }
+
+    btn.addEventListener("click", openModal);
+    cancelBtn.addEventListener("click", closeModal);
+    // Clicking the dimmed backdrop (not the modal card itself) closes it,
+    // same convention as most modal dialogs.
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) closeModal();
+    });
+    overlay.addEventListener("keydown", (ev) => {
+      if (ev.key === "Escape") closeModal();
+    });
+
+    sendBtn.addEventListener("click", async () => {
+      const message = messageInput.value.trim();
+      if (!message) {
+        alert("Please describe the emergency before sending.");
+        return;
+      }
+      if (!confirmCheckbox.checked) {
+        alert("Please check the confirmation box before sending — this button is for genuine emergencies only.");
+        return;
+      }
+      if (!confirm("Send this as an emergency alert? This immediately DMs command staff's emergency contact.")) {
+        return;
+      }
+      sendBtn.disabled = true;
+      statusEl.textContent = "Sending…";
+      try {
+        const res = await fetch("/api/admin/emergency-alert", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        });
+        const data = await res.json().catch(() => null);
+        if (res.ok && data && data.ok) {
+          statusEl.textContent = "Sent.";
+          setTimeout(closeModal, 1200);
+        } else {
+          statusEl.textContent = (data && data.error) || "Couldn't send that. Please try again.";
+          sendBtn.disabled = false;
+        }
+      } catch {
+        statusEl.textContent = "Couldn't send that. Check your connection.";
+        sendBtn.disabled = false;
+      }
+    });
+  }
+
   async function init() {
     const params = new URLSearchParams(window.location.search);
     const error = params.get("error");
@@ -148,6 +229,12 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     if (!mySubdivisions.length) {
       el("ca-no-subs").style.display = "block";
     }
+    // Emergency Alert is for subdivision heads specifically -- someone
+    // with only High Command access and no subdivision command role
+    // doesn't see the button, matching the server-side check.
+    const emergencyBtn = el("ca-emergency-btn");
+    if (emergencyBtn) emergencyBtn.style.display = mySubdivisions.length ? "" : "none";
+    setupEmergencyAlert();
 
     // Deputy Movement is department-wide (anyone with Command Login can
     // use it), so the tabs — and a default tab to land on — always

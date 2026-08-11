@@ -26,6 +26,21 @@ import { signSession, parseCookies } from "../../_lib/session.js";
 // Discord roles via requireFreshSession regardless of this TTL.
 const SESSION_HOURS = 6;
 
+// Constant-time string comparison for the OAuth CSRF nonce -- a plain
+// `!==` short-circuits on the first differing character, which leaks a
+// tiny per-character timing signal. The nonce only ever travels over TLS
+// and a full timing-based recovery is impractical regardless, but this
+// costs nothing and matches the timing-safe comparison session.js already
+// uses for the session cookie's signature.
+function timingSafeEqual(a, b) {
+  if (typeof a !== "string" || typeof b !== "string" || a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
+
 // Clears the short-lived OAuth CSRF-nonce cookie set by /api/auth/login,
 // regardless of which path this response takes (success or any error).
 function expireStateCookie(headers) {
@@ -63,7 +78,7 @@ export async function onRequestGet(context) {
   const stateNonce = sepIndex === -1 ? stateParam : stateParam.slice(0, sepIndex);
   const returnTo = sepIndex === -1 ? "" : stateParam.slice(sepIndex + 1);
   const expectedNonce = parseCookies(request)["bcso_oauth_state"];
-  if (!expectedNonce || !stateNonce || stateNonce !== expectedNonce) {
+  if (!expectedNonce || !stateNonce || !timingSafeEqual(stateNonce, expectedNonce)) {
     const headers = new Headers();
     headers.set("Location", `${url.origin}/command-access.html?error=invalid_state`);
     expireStateCookie(headers);

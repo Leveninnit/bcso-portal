@@ -33,7 +33,10 @@
         <div id="ca-dashboard" style="display:none;">
           <div class="panel ca-toprow">
             <span id="ca-whoami"></span>
-            <button type="button" class="btn btn-outline" id="ca-logout-btn">Log out</button>
+            <div class="ca-toprow-actions">
+              <button type="button" class="ca-emergency-btn" id="ca-emergency-btn" style="display:none;">🚨 Emergency Alert</button>
+              <button type="button" class="btn btn-outline" id="ca-logout-btn">Log out</button>
+            </div>
           </div>
 
           <div class="panel" id="ca-no-subs" style="display:none;">
@@ -47,6 +50,36 @@
       </div>
     </section>
   </main>
+
+  <!-- Emergency Alert — only shown/usable for subdivision heads (see
+       assets/command-access.js). Sends a direct, personally-typed DM to
+       command staff's emergency contact; not a substitute for a normal
+       Discord post, and misuse is treated as insubordination (see the
+       warning text below and functions/api/admin/emergency-alert.js). -->
+  <div class="ca-emergency-overlay" id="ca-emergency-overlay" style="display:none;">
+    <div class="ca-emergency-modal" role="dialog" aria-modal="true" aria-labelledby="ca-emergency-title">
+      <h2 id="ca-emergency-title">🚨 Emergency Alert</h2>
+      <p class="ca-emergency-warning">
+        This immediately sends a personal Discord DM to command staff's emergency contact. It is for genuine
+        emergencies only — situations that can't wait for a normal post in Discord to be seen.
+        <strong>Misusing this button is treated as insubordination and may result in disciplinary action.</strong>
+      </p>
+      <div class="form-row">
+        <label for="ca-emergency-message">What's the emergency?</label>
+        <textarea id="ca-emergency-message" rows="4" maxlength="1500" placeholder="Describe the emergency briefly and clearly…"></textarea>
+      </div>
+      <label class="ca-emergency-confirm-row">
+        <input type="checkbox" id="ca-emergency-confirm" />
+        I understand this is for genuine emergencies only, and misuse may be treated as insubordination.
+      </label>
+      <div class="ca-actions">
+        <button type="button" class="ca-btn-reject" id="ca-emergency-send">Send Emergency Alert</button>
+        <button type="button" class="ca-btn-delete" id="ca-emergency-cancel">Cancel</button>
+        <span class="ca-muted" id="ca-emergency-status"></span>
+      </div>
+    </div>
+  </div>
+
   <div id="site-footer-mount"></div>
   <script src="assets/subdivisions.js"></script>
   <script src="assets/main.js"></script>

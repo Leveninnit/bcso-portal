@@ -37,8 +37,9 @@ import {
   getGuildMembersWithRole,
   sendDirectMessage,
   resolveWebhookUrl,
-  postToWebhookWithId,
-  editWebhookMessage,
+  resolveWebhookChannelId,
+  postBotMessage,
+  editBotMessage,
   buildDecisionComponents,
 } from "../_lib/discord.js";
 
@@ -164,6 +165,11 @@ export async function onRequestPost(context) {
     if (value) fields.push({ name: "Additional Question", value, inline: false });
   }
   const embed = {
+    // Posted by the bot now (see below) instead of through a webhook, so
+    // this no longer shows as "BCSO Applications" with the crest as the
+    // message's own author — the embed's own `author` field recreates
+    // that branding instead.
+    author: { name: "BCSO Applications", icon_url: crestUrl },
     title: `New ${subdivisionName} Application`,
     color: 0xc9a227, // BCSO gold
     thumbnail: { url: crestUrl },
@@ -187,15 +193,19 @@ export async function onRequestPost(context) {
     allowedMentions.users.push(discordId);
   }
   const discordPayload = {
-    username: "BCSO Applications",
-    avatar_url: crestUrl,
     content: mentionParts.length ? mentionParts.join(" ") : undefined,
     embeds: [embed],
     allowed_mentions: allowedMentions,
   };
-  const postResult = await postToWebhookWithId(webhookUrl, discordPayload);
+  // Posted via the bot (not the webhook execute endpoint) -- Discord only
+  // routes button clicks to an application, and a plain channel webhook
+  // isn't one, so buttons attached to a webhook-posted message can never
+  // work. The webhook URL is still how this channel is configured (no new
+  // env vars needed) -- it's just used to look up the channel id here.
+  const appChannelId = await resolveWebhookChannelId(webhookUrl);
+  const postResult = await postBotMessage(env, appChannelId, discordPayload);
   if (!postResult.ok) {
-    console.error("Discord webhook rejected the message:", postResult.status, postResult.body || postResult.error);
+    console.error("Discord bot post rejected the application:", postResult.status, postResult.body || postResult.error);
     return jsonResponse({ error: "Discord rejected the application. Please try again or contact command staff." }, 502);
   }
   // --- Record it for Command Access (best-effort; never blocks the applicant) ---
@@ -226,7 +236,7 @@ export async function onRequestPost(context) {
   // --- Attach Approve/Reject buttons now that we know the submission id ---
   if (submissionId && postResult.messageId) {
     context.waitUntil(
-      editWebhookMessage(webhookUrl, postResult.messageId, {
+      editBotMessage(env, postResult.channelId, postResult.messageId, {
         components: buildDecisionComponents(submissionId, "application", subdivisionSlug),
       })
     );

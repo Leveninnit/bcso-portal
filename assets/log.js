@@ -132,6 +132,78 @@
     }
   }
 
+  // ------------------------------------------------------------------
+  // "Open Recruitment" recruited-person lists. Whichever RTD branch
+  // (Assist/Host/Supervise) has "Open Recruitment" picked as its Type
+  // swaps its normal FTO/Cadet/Supervised-person fields for a simple,
+  // repeatable "Recruited Person's Discord ID" field — a recruit doesn't
+  // have a badge number yet, and one session can net more than one
+  // person, so members can add as many rows as they need.
+  // ------------------------------------------------------------------
+  const RECRUIT_GROUPS = {
+    assist: { key: "assist", typeId: "assistType", trainingId: "rtd-assist-fto", recruitsId: "rtd-assist-recruits", listId: "assist-recruit-list", addBtnId: "assist-add-recruit", prefix: "assistRecruitDiscord" },
+    host: { key: "host", typeId: "hostType", trainingId: "rtd-host-training", recruitsId: "rtd-host-recruits", listId: "host-recruit-list", addBtnId: "host-add-recruit", prefix: "hostRecruitDiscord" },
+    supervise: { key: "supervise", typeId: "superviseType", trainingId: "rtd-supervise-person", recruitsId: "rtd-supervise-recruits", listId: "supervise-recruit-list", addBtnId: "supervise-add-recruit", prefix: "superviseRecruitDiscord" },
+  };
+
+  function addRecruitRow(group) {
+    const list = document.getElementById(group.listId);
+    const index = list.querySelectorAll(".rtd-recruit-input").length + 1;
+    const inputId = `${group.prefix}${index}`;
+    const row = document.createElement("div");
+    row.className = "rtd-recruit-row";
+    row.innerHTML =
+      `<div class="form-row">` +
+      `<label for="${inputId}">Recruited Person's Discord ID</label>` +
+      `<input type="text" id="${inputId}" class="rtd-recruit-input" data-recruit-group="${group.key}" placeholder="e.g. 372504974311632896" />` +
+      `</div>` +
+      `<button type="button" class="rtd-recruit-remove" aria-label="Remove this recruit">Remove</button>`;
+    row.querySelector(".rtd-recruit-remove").addEventListener("click", () => row.remove());
+    list.appendChild(row);
+    row.querySelector("input").focus();
+  }
+
+  function collectRecruitDiscordIds(group) {
+    return Array.from(document.querySelectorAll(`.rtd-recruit-input[data-recruit-group="${group.key}"]`))
+      .map((el) => el.value.trim())
+      .filter(Boolean);
+  }
+
+  // Toggles the training-fields vs. recruited-person-list sub-sections
+  // within one RTD branch, and keeps `required` in sync with whichever
+  // half is actually visible so the browser doesn't block submission on
+  // a hidden field. Called whenever the branch's Type dropdown changes,
+  // and whenever the overall Role changes (via updateRtdBranch below).
+  function syncRecruitToggle(group, panelActive) {
+    const typeVal = document.getElementById(group.typeId).value;
+    const isRecruit = typeVal === "Open Recruitment";
+    const trainingEl = document.getElementById(group.trainingId);
+    const recruitsEl = document.getElementById(group.recruitsId);
+    const showTraining = panelActive && !isRecruit;
+    const showRecruits = panelActive && isRecruit;
+    trainingEl.style.display = showTraining ? "" : "none";
+    recruitsEl.style.display = showRecruits ? "" : "none";
+
+    // Same "Cadet #2-4 / Notes stay optional" rule as before, scoped to
+    // just the training fields now that recruits live outside this group.
+    trainingEl.querySelectorAll("input, select").forEach((field) => {
+      const isOptionalField = /^cadet[234]/.test(field.id) || /Notes$/.test(field.id);
+      field.required = showTraining && !isOptionalField;
+    });
+    // Only the first recruit row is required — additional ones are just
+    // "add more if you have them."
+    recruitsEl.querySelectorAll(".rtd-recruit-input").forEach((el, i) => {
+      el.required = showRecruits && i === 0;
+    });
+  }
+
+  function setupRecruitLists() {
+    Object.values(RECRUIT_GROUPS).forEach((group) => {
+      document.getElementById(group.addBtnId).addEventListener("click", () => addRecruitRow(group));
+      document.getElementById(group.typeId).addEventListener("change", updateRtdBranch);
+    });
+  }
+
   function updateRtdBranch() {
     const role = document.getElementById("rtdRole").value; // "assist" | "host" | "supervise" | ""
     const panels = { assist: "rtd-assist", host: "rtd-host", supervise: "rtd-supervise" };
@@ -139,13 +211,12 @@
       const el = document.getElementById(id);
       const active = role === key;
       el.style.display = active ? "" : "none";
-      // Only require fields inside the currently-active branch. Cadet
-      // #2-4 stay optional even inside the Host branch (they mirror
-      // the Form's "(If Present)" questions).
-      el.querySelectorAll("input, select").forEach((field) => {
-        const isOptionalField = /^cadet[234]/.test(field.id) || /Notes$/.test(field.id);
-        field.required = active && !isOptionalField;
-      });
+      // The Type dropdown itself is required whenever this branch is
+      // active. Everything below it (training fields vs. recruited-person
+      // list) is handled by syncRecruitToggle, since which half applies
+      // depends on the Type value, not just which role is active.
+      document.getElementById(RECRUIT_GROUPS[key].typeId).required = active;
+      syncRecruitToggle(RECRUIT_GROUPS[key], active);
     });
   }
 
@@ -158,16 +229,23 @@
       result: val(`cadet${n}Result`),
       notes: val(`cadet${n}Notes`),
     });
+    const isOpenRecruitment = (typeId) => val(typeId) === "Open Recruitment";
+    const assistIsRecruit = role === "assist" && isOpenRecruitment("assistType");
+    const hostIsRecruit = role === "host" && isOpenRecruitment("hostType");
+    const superviseIsRecruit = role === "supervise" && isOpenRecruitment("superviseType");
     return {
       role,
       assistType: role === "assist" ? val("assistType") : "",
-      ftoBadge: role === "assist" ? val("ftoBadge") : "",
-      ftoDiscordId: role === "assist" ? val("ftoDiscordId") : "",
+      ftoBadge: role === "assist" && !assistIsRecruit ? val("ftoBadge") : "",
+      ftoDiscordId: role === "assist" && !assistIsRecruit ? val("ftoDiscordId") : "",
+      assistRecruits: assistIsRecruit ? collectRecruitDiscordIds(RECRUIT_GROUPS.assist) : [],
       hostType: role === "host" ? val("hostType") : "",
-      cadets: role === "host" ? [1, 2, 3, 4].map(cadet) : [],
+      cadets: role === "host" && !hostIsRecruit ? [1, 2, 3, 4].map(cadet) : [],
+      hostRecruits: hostIsRecruit ? collectRecruitDiscordIds(RECRUIT_GROUPS.host) : [],
       superviseType: role === "supervise" ? val("superviseType") : "",
-      supervisedBadge: role === "supervise" ? val("supervisedBadge") : "",
-      supervisedDiscordId: role === "supervise" ? val("supervisedDiscordId") : "",
+      supervisedBadge: role === "supervise" && !superviseIsRecruit ? val("supervisedBadge") : "",
+      supervisedDiscordId: role === "supervise" && !superviseIsRecruit ? val("supervisedDiscordId") : "",
+      superviseRecruits: superviseIsRecruit ? collectRecruitDiscordIds(RECRUIT_GROUPS.supervise) : [],
     };
   }
 
@@ -198,6 +276,7 @@
     applyFieldLabelOverrides(slugValue);
     setupRankField(slugValue);
 
+    setupRecruitLists();
     setRtdMode(isRtdSlug(slugValue));
     document.getElementById("rtdRole").addEventListener("change", updateRtdBranch);
   }

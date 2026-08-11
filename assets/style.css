@@ -536,6 +536,55 @@ footer.site-footer a {
   margin-right: 0.5rem;
 }
 
+/* ---------- RTD "Open Recruitment" recruited-person list ---------- */
+/* A plain, repeatable Discord ID field per person recruited (log.html's
+   RTD Assist/Host/Supervise branches, when their Type dropdown is set to
+   "Open Recruitment") with a small Add/Remove control, so members log as
+   many recruits as a session actually netted instead of being boxed into
+   one FTO/Cadet/Supervised-shaped field. See assets/log.js setupRecruitLists. */
+.rtd-recruit-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 0.6rem;
+  margin-bottom: 0.6rem;
+}
+.rtd-recruit-row .form-row {
+  flex: 1;
+}
+.rtd-recruit-remove {
+  flex: 0 0 auto;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--panel-border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 0.65rem 0.9rem;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-family: inherit;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.rtd-recruit-remove:hover {
+  border-color: #e08080;
+  color: #e08080;
+}
+.rtd-add-recruit {
+  display: inline-block;
+  margin-top: 0.2rem;
+  background: transparent;
+  border: 1px solid var(--panel-border);
+  color: var(--silver);
+  border-radius: 8px;
+  padding: 0.5rem 1rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+.rtd-add-recruit:hover {
+  border-color: var(--gold);
+  color: var(--gold-bright);
+}
+
 /* ---------- Stat bar (homepage) ---------- */
 
 .stat-bar {

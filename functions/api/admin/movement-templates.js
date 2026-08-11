@@ -124,23 +124,41 @@ export async function onRequestPut(context) {
   if (!body || !body.id || !validShape(body)) {
     return jsonResponse({ error: "Missing or invalid fields." }, 400);
   }
-  const subdivisionSlug = body.subdivisionSlug ? String(body.subdivisionSlug).trim().slice(0, 30) : null;
-  const session = subdivisionSlug
-    ? await requireSession(request, env, subdivisionSlug)
+
+  // Authorize against the template's *actual* stored scope, same as
+  // onRequestDelete below -- trusting body.subdivisionSlug alone (the
+  // old behavior) let a subdivision's command staff edit, and even
+  // silently reassign ownership of, another subdivision's (or the
+  // department-wide) templates just by supplying that template's id.
+  const existing = await env.DB.prepare("SELECT subdivision_slug FROM movement_templates WHERE id = ?")
+    .bind(body.id)
+    .first();
+  if (!existing) return jsonResponse({ error: "Template not found." }, 404);
+
+  const session = existing.subdivision_slug
+    ? await requireSession(request, env, existing.subdivision_slug)
     : await requireSession(request, env);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
+  // The UI never offers to move a template to a different subdivision --
+  // it always resubmits whichever scope the edit form was opened from --
+  // so reject anything that tries to, rather than silently honoring it.
+  const requestedSlug = body.subdivisionSlug ? String(body.subdivisionSlug).trim().slice(0, 30) : null;
+  if (requestedSlug !== (existing.subdivision_slug || null)) {
+    return jsonResponse({ error: "Cannot change a template's subdivision." }, 400);
+  }
+
   await env.DB.prepare(
     `UPDATE movement_templates
-     SET name = ?, role_ids_json = ?, sort_order = ?, subdivision_slug = ?, updated_at = datetime('now')
-     WHERE id = ?`
+     SET name = ?, role_ids_json = ?, sort_order = ?, updated_at = datetime('now')
+     WHERE id = ? AND subdivision_slug IS ?`
   )
     .bind(
       body.name.trim().slice(0, 100),
       JSON.stringify(body.roleIds.map((r) => String(r).trim())),
       Number.isFinite(body.sortOrder) ? body.sortOrder : 0,
-      subdivisionSlug,
-      body.id
+      body.id,
+      existing.subdivision_slug
     )
     .run();
 

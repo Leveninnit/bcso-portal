@@ -108,7 +108,7 @@ export async function onRequestPut(context) {
   const session = await requireSession(request, env, body.subdivisionSlug);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
-  await env.DB.prepare(
+  const updateResult = await env.DB.prepare(
     `UPDATE roster_entries SET rank = ?, badge_number = ?, callsign = ?, notes = ?, sort_order = ?, updated_at = datetime('now')
      WHERE id = ? AND subdivision_slug = ?`
   )
@@ -122,6 +122,11 @@ export async function onRequestPut(context) {
       body.subdivisionSlug
     )
     .run();
+  // See documents.js's onRequestPut for why this matters -- a WHERE that
+  // matches nothing (stale id) used to still report success.
+  if (!updateResult?.meta?.changes) {
+    return jsonResponse({ error: "Roster entry not found." }, 404);
+  }
 
   return jsonResponse({ ok: true }, 200);
 }

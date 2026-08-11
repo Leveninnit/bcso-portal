@@ -79,7 +79,7 @@ export async function onRequestPut(context) {
   const session = await requireSession(request, env, body.subdivisionSlug);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
-  await env.DB.prepare(
+  const updateResult = await env.DB.prepare(
     `UPDATE rank_options SET label = ?, sort_order = ? WHERE id = ? AND subdivision_slug = ?`
   )
     .bind(
@@ -89,6 +89,11 @@ export async function onRequestPut(context) {
       body.subdivisionSlug
     )
     .run();
+  // See documents.js's onRequestPut for why this matters -- a WHERE that
+  // matches nothing (stale id) used to still report success.
+  if (!updateResult?.meta?.changes) {
+    return jsonResponse({ error: "Rank option not found." }, 404);
+  }
 
   return jsonResponse({ ok: true }, 200);
 }

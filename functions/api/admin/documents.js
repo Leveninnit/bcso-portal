@@ -99,7 +99,7 @@ return jsonResponse({ error: "Missing or invalid fields." }, 400);
 const session = await requireSession(request, env, body.subdivisionSlug);
 if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
-await env.DB.prepare(
+const updateResult = await env.DB.prepare(
 `UPDATE subdivision_documents
 SET name = ?, description = ?, url = ?, sort_order = ?, updated_at = datetime('now')
 WHERE id = ? AND subdivision_slug = ?`
@@ -113,6 +113,13 @@ body.id,
 body.subdivisionSlug
 )
 .run();
+// A stale/wrong id (already deleted, typo, belongs to another
+// subdivision) used to still return { ok: true } here even though the
+// WHERE clause matched nothing -- the UI showed "Saved." while nothing
+// was actually saved.
+if (!updateResult?.meta?.changes) {
+return jsonResponse({ error: "Document not found." }, 404);
+}
 
 return jsonResponse({ ok: true }, 200);
 }

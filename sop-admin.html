@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Standard Operating Procedure — Admin</title>
+  <meta name="description" content="Edit the on-site Standard Operating Procedure text (High Command access only)." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+  <link rel="stylesheet" href="assets/team-admin.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section>
+      <div class="container">
+        <div class="breadcrumb">
+          <a href="index.html">Home</a> / <a href="command-access.html">Command Access</a> / Standard Operating Procedure
+        </div>
+        <h1 class="page-title">Standard Operating Procedure — Admin</h1>
+        <p class="page-sub">
+          Paste in the full SOP text below and save — it replaces the old Google Doc link, so this is now the live,
+          on-site copy everyone sees at <a href="sop.html">sop.html</a>. Only visible to accounts with High Command access.
+          A blank line starts a new paragraph on the public page.
+        </p>
+        <div id="sop-admin-status" class="page-sub"></div>
+        <div id="sop-admin-denied" class="panel" style="display:none;">
+          <p>You don't have High Command access. If you believe this is a mistake, contact a system administrator.</p>
+        </div>
+        <div id="sop-admin-body" style="display:none;">
+          <p class="ta-save-status" id="sop-admin-last-updated" style="display:block; margin-bottom:0.75rem;"></p>
+          <div class="panel team-admin-card">
+            <label>SOP Text<textarea id="sop-admin-text" rows="24" maxlength="100000" placeholder="Paste the full SOP here…"></textarea></label>
+          </div>
+          <div class="ca-actions" style="margin-top:1.5rem;">
+            <button type="button" class="btn btn-gold" id="sop-admin-save">Save SOP</button>
+            <span id="sop-admin-save-status" class="ta-save-status"></span>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/subdivisions.js"></script>
+  <script src="assets/main.js"></script>
+  <script src="assets/effects.js"></script>
+  <script src="assets/sop-admin.js"></script>
+</body>
+</html>

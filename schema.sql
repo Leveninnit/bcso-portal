@@ -8,10 +8,10 @@
 --
 -- SETTING UP FRESH: this file is now the complete schema by itself --
 -- every table and column that used to be added later by migration-2.sql
--- and migration-4.sql/migration-5.sql is already included below. You do
--- NOT need to also run migration-2/4/5 on a brand-new database; just run
--- this file and you're done. (migration-3.sql was never needed at all --
--- see its own header.)
+-- and migration-4.sql/migration-5.sql/migration-6.sql is already included
+-- below. You do NOT need to also run migration-2/4/5/6 on a brand-new
+-- database; just run this file and you're done. (migration-3.sql was
+-- never needed at all -- see its own header.)
 --
 -- UPGRADING AN EXISTING DATABASE that was already set up before this
 -- file was updated to include everything: you've presumably already run
@@ -238,3 +238,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_lookup
   ON audit_log (subdivision_slug, created_at);
+
+-- Small generic "who last changed this and when" tracker (originally
+-- added by migration-6.sql). Not tied to one table -- content_key
+-- identifies whatever was changed: "sop" for the on-site Standard
+-- Operating Procedure text (see site_content's 'sop' row, and
+-- functions/api/admin/sop.js), or "roster:<slug>" for a given
+-- subdivision's Roster (e.g. "roster:teu" -- see roster_entries and
+-- functions/api/admin/roster.js). One row per content_key, overwritten
+-- on every edit -- this only ever answers "who touched this LAST", not
+-- a full history (see audit_log above for that).
+CREATE TABLE IF NOT EXISTS content_meta (
+  content_key TEXT PRIMARY KEY,
+  updated_by TEXT NOT NULL,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);

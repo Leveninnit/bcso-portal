@@ -17,6 +17,7 @@
 <div class="breadcrumb" id="roster-breadcrumb"><a href="index.html">Home</a> / Roster</div>
 <h1 class="page-title" id="roster-title">Roster</h1>
 <p class="page-sub" id="roster-subtitle">Current members, kept up to date by command staff.</p>
+<p class="page-sub" id="roster-last-updated" style="display:none;"></p>
 <div id="roster-grid"></div>
 </div>
 </section>
@@ -67,6 +68,30 @@ return "status-inactive";
 function renderActivityCell(level) {
 return `<span class="status-pill ${activityPillClass(level)}">${escapeHtml(level || "Inactive")}</span>`;
 }
+// Same "D1's datetime('now') is UTC without a 'Z'" handling as
+// assets/leaderboards.js's formatDate.
+function formatDate(value) {
+if (!value) return "";
+const iso = value.includes("T") ? value : value.replace(" ", "T") + "Z";
+const d = new Date(iso);
+if (isNaN(d.getTime())) return value;
+return d.toLocaleString(undefined, {
+year: "numeric",
+month: "short",
+day: "numeric",
+hour: "numeric",
+minute: "2-digit",
+});
+}
+function renderLastUpdated(lastUpdated) {
+const el = document.getElementById("roster-last-updated");
+if (!lastUpdated || !lastUpdated.at) {
+el.style.display = "none";
+return;
+}
+el.textContent = `Last updated ${formatDate(lastUpdated.at)} by ${lastUpdated.by}.`;
+el.style.display = "";
+}
 async function loadRoster(sub) {
 const grid = document.getElementById("roster-grid");
 grid.innerHTML = "Loading…";
@@ -74,6 +99,7 @@ try {
 const res = await fetch(`/api/roster?div=${encodeURIComponent(sub.slug)}`, { cache: "no-store" });
 const data = await res.json().catch(() => ({}));
 const entries = data.entries || [];
+renderLastUpdated(data.lastUpdated);
 if (!entries.length) {
 document.getElementById("roster-subtitle").textContent =
 `No roster entries yet for ${sub.short} — command staff can add some from Command Access.`;

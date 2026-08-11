@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Standard Operating Procedure — BCSO</title>
+  <meta name="description" content="The full BCSO Standard Operating Procedure — ranks, chain of command, vehicle and uniform policy, training program, and more." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section>
+      <div class="container legal-page">
+        <div class="breadcrumb"><a href="index.html">Home</a> / <a href="documents.html">Master Documents</a> / Standard Operating Procedure</div>
+        <h1 class="page-title">Standard Operating Procedure</h1>
+        <p class="page-sub" id="sop-subtitle">The full BCSO SOP, kept up to date by High Command directly on this page.</p>
+
+        <div class="panel legal-panel" id="sop-body">Loading…</div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/main.js"></script>
+  <script src="assets/effects.js"></script>
+  <script>
+    function escapeHtml(str) {
+      return (str ?? "").toString().replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[c]));
+    }
+    // Same "D1's datetime('now') is UTC without a 'Z'" handling as
+    // assets/leaderboards.js's formatDate -- kept local here since this
+    // is the only date this page ever formats.
+    function formatDate(value) {
+      if (!value) return "";
+      const iso = value.includes("T") ? value : value.replace(" ", "T") + "Z";
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return value;
+      return d.toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    }
+    // The SOP is plain text (command staff paste it in from wherever they
+    // drafted it) -- rendered here as paragraphs/line breaks rather than
+    // one unbroken block, without interpreting any markup. A blank line
+    // starts a new paragraph; a single line break within a paragraph
+    // becomes <br>.
+    function renderSopText(text) {
+      const paragraphs = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+      if (!paragraphs.length) return "";
+      return paragraphs.map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`).join("");
+    }
+    async function loadSop() {
+      const body = document.getElementById("sop-body");
+      const subtitle = document.getElementById("sop-subtitle");
+      try {
+        const res = await fetch("/api/sop", { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        const text = (data && data.text) || "";
+        if (data && data.lastUpdated && data.lastUpdated.at) {
+          subtitle.textContent = `Last updated ${formatDate(data.lastUpdated.at)} by ${data.lastUpdated.by}.`;
+        }
+        if (!text.trim()) {
+          body.innerHTML = `<p>The SOP hasn't been added to the site yet — check back soon, or ask command staff on Discord.</p>`;
+          return;
+        }
+        body.innerHTML = renderSopText(text);
+      } catch {
+        body.innerHTML = `<p>Couldn't load the SOP. Try refreshing.</p>`;
+      }
+    }
+    document.addEventListener("DOMContentLoaded", loadSop);
+  </script>
+</body>
+</html>

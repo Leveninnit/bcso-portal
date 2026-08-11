@@ -17,10 +17,18 @@
  * RTD's Assist/Host/Supervise branches each swap their normal
  * FTO/Cadet/Supervised-person fields for a simple recruited-person
  * Discord ID list (one or more) when their Type dropdown is "Open
- * Recruitment" — see cleanRtd's *Recruits arrays below. NOTE: those
- * arrays are new; the Apps Script (Code.gs, not part of this repo) may
- * need a small update on the Google side to actually place recruited
- * people into the sheet — this endpoint just forwards the data.
+ * Recruitment" (Host also offers "Discord Recruitment") — see cleanRtd's
+ * *Recruits arrays below. NOTE: those arrays are new; the Apps Script
+ * (Code.gs, not part of this repo) may need a small update on the Google
+ * side to actually place recruited people into the sheet — this endpoint
+ * just forwards the data.
+ *
+ * Host -> "Discord Recruitment" is further special-cased as having no
+ * on-duty shift at all — it's just a note that a recruitment happened
+ * over Discord — so Duration on Duty and Shift Summary are both skipped
+ * (not required, forced to 0/empty, left out of the Discord embed and
+ * the Apps Script payload's *Duration field) via `isDiscordRecruitment`
+ * below. Every other role/type combination is unaffected.
  *
  * Duration is collected as separate hours/minutes/seconds fields (not a
  * single decimal-hours number) so shifts can be logged down to the
@@ -169,7 +177,9 @@ async function forwardToSheet(env, { badgeNumber, discordId, rank, hoursOnDuty, 
       // is a new field the original Google Form/script never sent.
       assistRecruits: isAssist ? rtd.assistRecruits : [],
       hostType: isHost ? rtd.hostType : "",
-      hostDuration: isHost ? hms : "",
+      // "Discord Recruitment" has no shift/duration at all (see the file
+      // header) — send an empty string rather than a misleading "0:00:00".
+      hostDuration: isHost && rtd.hostType !== "Discord Recruitment" ? hms : "",
       cadets: isHost ? rtd.cadets : [],
       hostRecruits: isHost ? rtd.hostRecruits : [],
       superviseType: isSupervise ? rtd.superviseType : "",
@@ -319,12 +329,14 @@ export async function onRequestPost(context) {
   }
 
   // --- Validation -------------------------------------------------------
+  // "summary" is intentionally not in this blanket list — RTD's Host ->
+  // "Discord Recruitment" has no Shift Summary at all (see below), so it's
+  // validated separately once we know whether that case applies.
   const required = [
     "characterName",
     "discordId",
     "badgeNumber",
     "rank",
-    "summary",
     "subdivisionSlug",
     "subdivisionName",
   ];
@@ -342,26 +354,31 @@ export async function onRequestPost(context) {
   const subdivisionSlug = clean(data.subdivisionSlug, 30).toLowerCase().replace(/[^a-z0-9_-]/g, "");
   const answers = cleanAnswers(data.answers);
 
-  const durationHours = toNonNegInt(data.durationHours, 24);
-  const durationMinutes = toNonNegInt(data.durationMinutes, 59);
-  const durationSeconds = toNonNegInt(data.durationSeconds, 59);
+  // RTD only, parsed early: Host -> "Discord Recruitment" isn't an
+  // on-duty shift, just a note that a recruitment happened over Discord,
+  // so it has no Duration on Duty or Shift Summary — both requirements
+  // are skipped for it below.
+  const rtd = subdivisionSlug === "rtd" ? cleanRtd(data.rtd) : null;
+  const isDiscordRecruitment = !!rtd && rtd.role === "host" && rtd.hostType === "Discord Recruitment";
+
+  const durationHours = isDiscordRecruitment ? 0 : toNonNegInt(data.durationHours, 24);
+  const durationMinutes = isDiscordRecruitment ? 0 : toNonNegInt(data.durationMinutes, 59);
+  const durationSeconds = isDiscordRecruitment ? 0 : toNonNegInt(data.durationSeconds, 59);
   if (durationHours === null || durationMinutes === null || durationSeconds === null) {
     return jsonResponse({ error: "Please enter a valid duration (hours, minutes, seconds)." }, 400);
   }
   const totalSeconds = durationHours * 3600 + durationMinutes * 60 + durationSeconds;
-  if (totalSeconds <= 0 || totalSeconds > 24 * 3600) {
+  if (!isDiscordRecruitment && (totalSeconds <= 0 || totalSeconds > 24 * 3600)) {
     return jsonResponse({ error: "Duration must be between 1 second and 24 hours." }, 400);
   }
   const hoursOnDuty = totalSeconds / 3600; // decimal, kept for the sheet-sync functions below
-  const durationDisplay = formatDuration(durationHours, durationMinutes, durationSeconds);
+  const durationDisplay = isDiscordRecruitment ? "" : formatDuration(durationHours, durationMinutes, durationSeconds);
 
-  if (summary.length < 10) {
+  if (!isDiscordRecruitment && summary.length < 10) {
     return jsonResponse({ error: "Please write at least 10 characters describing your shift." }, 400);
   }
 
-  let rtd = null;
-  if (subdivisionSlug === "rtd") {
-    rtd = cleanRtd(data.rtd);
+  if (rtd) {
     if (!["assist", "host", "supervise"].includes(rtd.role)) {
       return jsonResponse({ error: "Please select your role during this activation." }, 400);
     }
@@ -381,7 +398,7 @@ export async function onRequestPost(context) {
       if (!rtd.hostType) {
         return jsonResponse({ error: "Please select what you hosted." }, 400);
       }
-      if (rtd.hostType === "Open Recruitment") {
+      if (rtd.hostType === "Open Recruitment" || rtd.hostType === "Discord Recruitment") {
         if (!rtd.hostRecruits.length) {
           return jsonResponse({ error: "Please add at least one recruited person's Discord ID." }, 400);
         }
@@ -425,8 +442,13 @@ export async function onRequestPost(context) {
     { name: "Badge Number", value: badgeNumber, inline: true },
     { name: "Rank", value: rank, inline: true },
     { name: "Subdivision", value: subdivisionName, inline: true },
-    { name: "Duration", value: durationDisplay, inline: true },
   ];
+  // Discord embed field values can't be empty, and "Discord Recruitment"
+  // has no duration to show — so this field is left out entirely for it
+  // rather than showing a meaningless "0h 00m 00s".
+  if (!isDiscordRecruitment) {
+    fields.push({ name: "Duration", value: durationDisplay, inline: true });
+  }
   if (rtd) {
     if (rtd.role === "assist") {
       fields.push(
@@ -443,7 +465,7 @@ export async function onRequestPost(context) {
         { name: "Role", value: "Host", inline: true },
         { name: "Hosted", value: rtd.hostType, inline: true }
       );
-      if (rtd.hostType === "Open Recruitment" && rtd.hostRecruits.length) {
+      if ((rtd.hostType === "Open Recruitment" || rtd.hostType === "Discord Recruitment") && rtd.hostRecruits.length) {
         fields.push({ name: "Recruited", value: rtd.hostRecruits.join("\n"), inline: false });
       } else {
         rtd.cadets
@@ -468,7 +490,11 @@ export async function onRequestPost(context) {
       }
     }
   }
-  fields.push({ name: "Shift Summary", value: summary, inline: false });
+  // Same empty-value rule as Duration above — "Discord Recruitment" has
+  // no Shift Summary, so skip the field instead of pushing an empty one.
+  if (!isDiscordRecruitment && summary) {
+    fields.push({ name: "Shift Summary", value: summary, inline: false });
+  }
 
   const embed = {
     title: `Activity Log — ${subdivisionName}`,

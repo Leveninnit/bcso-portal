@@ -28,7 +28,7 @@
  * "Decided by") on the Command Access dashboard too. This is the Discord
  * side of the same sync admin/submissions.js does for the website side.
  */
-import { verifyDiscordInteraction, SUBDIVISION_COMMAND_ROLES } from "../../_lib/discord.js";
+import { verifyDiscordInteraction, SUBDIVISION_COMMAND_ROLES, COMMAND_LOGIN_ROLE_ID } from "../../_lib/discord.js";
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
@@ -51,11 +51,21 @@ async function handleDecisionButton(context, interaction) {
   }
 
   // Authorize: the clicking member must hold this subdivision's command
-  // role — the same permission boundary the website enforces via
-  // requireSession(request, env, subdivisionSlug).
+  // role AND the Command Login role — matching the website's policy
+  // exactly (requireSession(request, env, subdivisionSlug) requires both,
+  // since a session can't even be created without Command Login — see
+  // auth/callback.js). Without also requiring Command Login here, someone
+  // holding only a subdivision command role (but not Command Login, and
+  // therefore unable to log into the dashboard at all) could still decide
+  // that subdivision's submissions from Discord — a broader grant than
+  // the website itself allows for the identical action.
   const memberRoles = (interaction.member && interaction.member.roles) || [];
   const commandRoleId = SUBDIVISION_COMMAND_ROLES[subdivisionSlug];
-  if (!commandRoleId || !memberRoles.includes(commandRoleId)) {
+  if (
+    !commandRoleId ||
+    !memberRoles.includes(commandRoleId) ||
+    !memberRoles.includes(COMMAND_LOGIN_ROLE_ID)
+  ) {
     return ephemeral("You need this subdivision's command role to decide on this.");
   }
 

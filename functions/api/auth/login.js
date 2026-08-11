@@ -29,8 +29,25 @@ export async function onRequestGet(context) {
   // command-access.js can jump straight there once login finishes.
   // Tightly whitelisted so this can never become an open redirect.
   const returnTo = url.searchParams.get("returnTo") || "";
-  if (/^div=[a-z0-9_-]{1,30}(&type=(application|log))?(&id=\d{1,10})?$/.test(returnTo)) {
-    authorizeUrl.searchParams.set("state", returnTo);
-  }
-  return Response.redirect(authorizeUrl.toString(), 302);
+  const validReturnTo = /^div=[a-z0-9_-]{1,30}(&type=(application|log))?(&id=\d{1,10})?$/.test(returnTo)
+    ? returnTo
+    : "";
+
+  // CSRF protection: a random nonce goes into both a short-lived HttpOnly
+  // cookie and the OAuth "state" param. The callback only issues a
+  // session if the state it gets back still carries this same nonce.
+  // Without this, an attacker could start their own OAuth flow, capture
+  // the resulting callback link (which contains *their* one-time code),
+  // and get someone else to open it -- silently logging that person's
+  // browser in as the attacker's Discord identity ("login CSRF").
+  const nonce = crypto.randomUUID().replace(/-/g, "");
+  authorizeUrl.searchParams.set("state", validReturnTo ? `${nonce}|${validReturnTo}` : nonce);
+
+  const headers = new Headers();
+  headers.set("Location", authorizeUrl.toString());
+  headers.append(
+    "Set-Cookie",
+    `bcso_oauth_state=${nonce}; Path=/api/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=600`
+  );
+  return new Response(null, { status: 302, headers });
 }

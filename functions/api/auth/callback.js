@@ -15,10 +15,22 @@ import {
   getOAuthUser,
   getGuildMemberRoles,
   computePermissions,
+  HIGH_COMMAND_ROLE_ID,
 } from "../../_lib/discord.js";
-import { signSession } from "../../_lib/session.js";
+import { signSession, parseCookies } from "../../_lib/session.js";
 
-const SESSION_HOURS = 12;
+// Shortened from 12h -- sessions are stateless and can't be revoked (see
+// session.js), so this is the main lever for how long someone keeps
+// dashboard access after being stripped of their Discord role. Destructive
+// actions (deleting/deciding a submission) additionally re-check live
+// Discord roles via requireFreshSession regardless of this TTL.
+const SESSION_HOURS = 6;
+
+// Clears the short-lived OAuth CSRF-nonce cookie set by /api/auth/login,
+// regardless of which path this response takes (success or any error).
+function expireStateCookie(headers) {
+  headers.append("Set-Cookie", "bcso_oauth_state=; Path=/api/auth; HttpOnly; Secure; SameSite=Lax; Max-Age=0");
+}
 
 export async function onRequestGet(context) {
   const { request, env } = context;
@@ -27,10 +39,10 @@ export async function onRequestGet(context) {
   const oauthError = url.searchParams.get("error");
 
   if (oauthError) {
-    return Response.redirect(
-      `${url.origin}/command-access.html?error=${encodeURIComponent(oauthError)}`,
-      302
-    );
+    const headers = new Headers();
+    headers.set("Location", `${url.origin}/command-access.html?error=${encodeURIComponent(oauthError)}`);
+    expireStateCookie(headers);
+    return new Response(null, { status: 302, headers });
   }
   if (!code) {
     return Response.redirect(`${url.origin}/command-access.html?error=missing_code`, 302);
@@ -42,40 +54,63 @@ export async function onRequestGet(context) {
     );
   }
 
+  // CSRF check: the nonce this browser was given by /api/auth/login must
+  // match the nonce embedded in the "state" Discord handed back. If it
+  // doesn't (missing cookie, mismatched nonce, or state tampered with),
+  // refuse to log this browser in -- see the comment in login.js for why.
+  const stateParam = url.searchParams.get("state") || "";
+  const sepIndex = stateParam.indexOf("|");
+  const stateNonce = sepIndex === -1 ? stateParam : stateParam.slice(0, sepIndex);
+  const returnTo = sepIndex === -1 ? "" : stateParam.slice(sepIndex + 1);
+  const expectedNonce = parseCookies(request)["bcso_oauth_state"];
+  if (!expectedNonce || !stateNonce || stateNonce !== expectedNonce) {
+    const headers = new Headers();
+    headers.set("Location", `${url.origin}/command-access.html?error=invalid_state`);
+    expireStateCookie(headers);
+    return new Response(null, { status: 302, headers });
+  }
+
   try {
     const redirectUri = `${url.origin}/api/auth/callback`;
     const tokenData = await exchangeCode(env, code, redirectUri);
     const discordUser = await getOAuthUser(tokenData.access_token);
     const roles = await getGuildMemberRoles(env, discordUser.id);
-  const isHighCommand = roles.includes("1533008196023746591");
+    const isHighCommand = roles.includes(HIGH_COMMAND_ROLE_ID);
     const permissions = computePermissions(roles);
 
     if (!permissions.hasCommandLogin) {
-      return Response.redirect(`${url.origin}/command-access.html?error=no_access`, 302);
+      const headers = new Headers();
+      headers.set("Location", `${url.origin}/command-access.html?error=no_access`);
+      expireStateCookie(headers);
+      return new Response(null, { status: 302, headers });
     }
 
     const session = await signSession(env.SESSION_SECRET, {
       discordId: discordUser.id,
       username: discordUser.username,
       subdivisions: permissions.subdivisions,
+      isHighCommand,
       exp: Date.now() + SESSION_HOURS * 60 * 60 * 1000,
-    
-    isHighCommand,});
+    });
+
+    const redirectBase = `${url.origin}/command-access.html`;
+    const redirectTarget = /^div=[a-z0-9_-]{1,30}(&type=(application|log))?(&id=\d{1,10})?$/.test(returnTo)
+      ? `${redirectBase}?${returnTo}`
+      : redirectBase;
 
     const headers = new Headers();
-    const state = url.searchParams.get("state") || "";
-  const redirectBase = `${url.origin}/command-access.html`;
-  const redirectTarget = /^div=[a-z0-9_-]{1,30}(&type=(application|log))?(&id=\d{1,10})?$/.test(state)
-    ? `${redirectBase}?${state}`
-    : redirectBase;
-  headers.set("Location", redirectTarget);
+    headers.set("Location", redirectTarget);
     headers.append(
       "Set-Cookie",
       `bcso_session=${session}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_HOURS * 3600}`
     );
+    expireStateCookie(headers);
     return new Response(null, { status: 302, headers });
   } catch (e) {
     console.error("Command Access login failed:", e);
-    return Response.redirect(`${url.origin}/command-access.html?error=login_failed`, 302);
+    const headers = new Headers();
+    headers.set("Location", `${url.origin}/command-access.html?error=login_failed`);
+    expireStateCookie(headers);
+    return new Response(null, { status: 302, headers });
   }
 }

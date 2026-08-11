@@ -134,10 +134,15 @@ export async function getGuildMembersWithRole(env, roleId) {
 
 /**
  * Sends a Discord DM to a single user via the bot (opens/reuses a DM
- * channel, then posts the message). Best-effort and non-fatal -- a
- * failure here (DMs closed, bot not sharing a server with them, rate
- * limit, etc.) is logged and swallowed so it never blocks or breaks the
- * application/log submission that triggered it.
+ * channel, then posts the message). Non-fatal -- never throws -- but,
+ * unlike the fire-and-forget notifications this was originally written
+ * for, it DOES report back whether the DM actually went out, via the
+ * same { ok, error } shape postBotMessage uses below. The original
+ * best-effort callers (application/log command-staff notifications) can
+ * keep ignoring the return value exactly as before; a caller like the
+ * Command Access emergency alert, where silently failing to deliver
+ * would defeat the entire point of the feature, can check `ok` and tell
+ * the person who sent it that it didn't go through.
  */
 export async function sendDirectMessage(env, userId, content) {
   try {
@@ -151,7 +156,7 @@ export async function sendDirectMessage(env, userId, content) {
     });
     if (!channelRes.ok) {
       console.error("Couldn't open DM channel with", userId, channelRes.status);
-      return;
+      return { ok: false, error: `Couldn't open a DM channel (status ${channelRes.status}).` };
     }
     const channel = await channelRes.json();
     const msgRes = await fetch(`https://discord.com/api/channels/${channel.id}/messages`, {
@@ -164,9 +169,12 @@ export async function sendDirectMessage(env, userId, content) {
     });
     if (!msgRes.ok) {
       console.error("Couldn't DM", userId, msgRes.status);
+      return { ok: false, error: `Discord rejected the DM (status ${msgRes.status}).` };
     }
+    return { ok: true };
   } catch (err) {
     console.error("Failed to send Discord DM to", userId, err);
+    return { ok: false, error: String(err) };
   }
 }
 

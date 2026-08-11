@@ -320,7 +320,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     if (!showApplications) activeFormType = "log";
 
     const innerTabsHtml = `
-      <div class="ca-inner-tabs" id="ca-form-type-tabs" style="display:${activeInnerTab === "documents" ? "none" : ""};">
+      <div class="ca-inner-tabs" id="ca-form-type-tabs" style="display:${activeInnerTab === "documents" || activeInnerTab === "sop" ? "none" : ""};">
         ${showApplications ? `<button type="button" class="ca-inner-tab-btn" data-type="application">Applications</button>` : ""}
         <button type="button" class="ca-inner-tab-btn" data-type="log">Activity Logs</button>
       </div>
@@ -330,6 +330,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         <button type="button" class="ca-inner-tab-btn" data-tab="ranks">Ranks</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="roster">Roster</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="documents">Documents</button>
+        <button type="button" class="ca-inner-tab-btn" data-tab="sop">SOP</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="movements">Movement Templates</button>
         ${activeSlug !== "srt" ? `<button type="button" class="ca-inner-tab-btn" data-tab="leadership">Leadership</button>` : ""}
       </div>
@@ -360,6 +361,8 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       renderRanksPanel();
     } else if (activeInnerTab === "roster") {
       renderRosterPanel();
+    } else if (activeInnerTab === "sop") {
+      renderSubdivisionSopPanel();
     } else if (activeInnerTab === "movements") {
       renderMovementTab(el("ca-panel"), activeSlug);
     } else if (activeInnerTab === "leadership") {
@@ -1340,6 +1343,83 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       renderQuestionForm(null);
       loadQuestions();
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Subdivision SOP — a per-subdivision Standard Operating Procedure text,
+  // editable by that subdivision's own command staff and shown publicly
+  // on subdivision-sop.html?div=slug (linked from this subdivision's
+  // Documents page). Separate from the department-wide SOP (sop.html /
+  // sop-admin.html / functions/api/admin/sop.js, High-Command-only) --
+  // this one is scoped to and managed entirely by the subdivision itself,
+  // same access level as its Roster/Ranks/Documents. Stored in the same
+  // site_content table as the department-wide SOP, just under a
+  // different content_key ("sop:<slug>" instead of "sop") -- see
+  // functions/api/admin/subdivision-sop.js.
+  // ---------------------------------------------------------------------
+  async function renderSubdivisionSopPanel() {
+    const panel = el("ca-panel");
+    panel.innerHTML = `
+      <div class="panel">
+        <p class="ca-section-title">${subInfo(activeSlug).short} SOP</p>
+        <p class="ca-muted">Paste in ${subInfo(activeSlug).short}'s own Standard Operating Procedure text and save — it's shown publicly at <a href="subdivision-sop.html?div=${encodeURIComponent(activeSlug)}" target="_blank" rel="noopener">subdivision-sop.html?div=${encodeURIComponent(activeSlug)}</a>, linked from this subdivision's Documents page. A blank line starts a new paragraph on that page. This is separate from the department-wide SOP.</p>
+        <p class="ca-muted" id="ca-sop-last-updated"></p>
+        <div id="ca-sop-body">Loading…</div>
+      </div>
+    `;
+    await loadSubdivisionSop();
+  }
+
+  async function loadSubdivisionSop() {
+    const body = el("ca-sop-body");
+    const lastUpdatedEl = el("ca-sop-last-updated");
+    const slug = activeSlug;
+    try {
+      const res = await fetch(`/api/admin/subdivision-sop?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("request failed");
+      const data = await res.json();
+      if (lastUpdatedEl) {
+        lastUpdatedEl.textContent =
+          data.lastUpdated && data.lastUpdated.at
+            ? `Last updated ${formatDate(data.lastUpdated.at)} by ${data.lastUpdated.by}.`
+            : "Never edited on the site yet.";
+      }
+      body.innerHTML = `
+        <textarea id="ca-sop-text" rows="18" maxlength="100000" placeholder="Paste ${escapeHtml(subInfo(slug).short)}'s SOP here…" style="width:100%;"></textarea>
+        <div class="ca-actions" style="margin-top:0.75rem;">
+          <button class="ca-btn-accept" id="ca-sop-save">Save SOP</button>
+          <span class="ca-muted" id="ca-sop-save-status"></span>
+        </div>
+      `;
+      el("ca-sop-text").value = data.text || "";
+      const saveBtn = el("ca-sop-save");
+      saveBtn.addEventListener("click", async () => {
+        const saveStatus = el("ca-sop-save-status");
+        saveStatus.textContent = "Saving…";
+        saveBtn.disabled = true;
+        try {
+          const putRes = await fetch("/api/admin/subdivision-sop", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ subdivisionSlug: slug, text: el("ca-sop-text").value }),
+          });
+          const putData = await putRes.json().catch(() => null);
+          if (putRes.ok && putData && putData.ok) {
+            saveStatus.textContent = "Saved.";
+            if (lastUpdatedEl) lastUpdatedEl.textContent = "Last updated just now.";
+          } else {
+            saveStatus.textContent = (putData && putData.error) || "Failed to save.";
+          }
+        } catch {
+          saveStatus.textContent = "Failed to save. Check your connection.";
+        } finally {
+          saveBtn.disabled = false;
+        }
+        setTimeout(() => (saveStatus.textContent = ""), 3000);
+      });
+    } catch {
+      body.innerHTML = `<p class="ca-muted">Couldn't load the SOP. Try refreshing.</p>`;
+    }
   }
 
   // ---------------------------------------------------------------------

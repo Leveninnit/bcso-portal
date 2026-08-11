@@ -41,11 +41,25 @@
 
 const SLUG_RE = /^[a-z0-9_-]{1,30}$/;
 const LOG_LIMIT = 200;
+// D1's own clock (and created_at, via datetime('now')) is UTC. Filtering
+// "this month" purely server-side with strftime('%Y-%m', 'now') means
+// the boundary is always UTC midnight on the 1st -- for anyone west of
+// UTC, their local "start of the month" is still the tail end of last
+// month by that clock (e.g. 11pm Aug 31 Pacific is already Sep 1 UTC),
+// so a log made in the first few hours of a new local month could get
+// counted in the wrong one, or a log from the last local hours of a
+// month could get left out of it. DATETIME_RE validates an optional
+// client-supplied LOCAL month boundary (converted to its UTC equivalent
+// client-side -- see assets/leaderboards.js) so "This Month" can mean
+// the viewer's own calendar month instead of always UTC's.
+const DATETIME_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    // See functions/api/team.js for why this is a short public cache
+    // instead of no-store.
+    headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=15" },
   });
 }
 
@@ -65,6 +79,9 @@ export async function onRequestGet(context) {
   const div = divParam !== "all" && SLUG_RE.test(divParam) ? divParam : null;
 
   const period = url.searchParams.get("period") === "month" ? "month" : "all";
+  const monthStartParam = url.searchParams.get("monthStart") || "";
+  const monthEndParam = url.searchParams.get("monthEnd") || "";
+  const hasLocalMonthBounds = DATETIME_RE.test(monthStartParam) && DATETIME_RE.test(monthEndParam);
 
   if (!env.DB) {
     return jsonResponse(emptyPayload(), 200);
@@ -80,7 +97,17 @@ export async function onRequestGet(context) {
       binds.push(div);
     }
     if (period === "month") {
-      query += " AND substr(created_at, 1, 7) = strftime('%Y-%m', 'now')";
+      if (hasLocalMonthBounds) {
+        // Viewer's own local calendar month, converted to its UTC
+        // equivalent client-side -- see DATETIME_RE's comment above.
+        query += " AND created_at >= ? AND created_at < ?";
+        binds.push(monthStartParam, monthEndParam);
+      } else {
+        // No (valid) client-supplied bounds -- fall back to the old
+        // UTC-calendar-month behavior so this endpoint still works for
+        // any caller that doesn't pass them.
+        query += " AND substr(created_at, 1, 7) = strftime('%Y-%m', 'now')";
+      }
     }
     query += " ORDER BY created_at DESC";
 

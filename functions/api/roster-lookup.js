@@ -91,6 +91,16 @@ export async function onRequestGet(context) {
   }
   const person = badgeNumber ? lookupByBadge(table, badgeNumber) : lookupByDiscordId(table, discordId);
   if (!person.found) return jsonResponse({ found: false }, 200);
+  if (person.ambiguous) {
+    // More than one sheet row matched -- we still return the first match
+    // (fails soft, same as ever), but this is worth a server-side log so
+    // whoever maintains the Master Roster can go dedupe it; the person
+    // filling out the form has no way to know their autofill might be
+    // someone else's data.
+    console.error(
+      `Roster lookup ambiguous: multiple rows matched ${badgeNumber ? "badge " + badgeNumber : "discord id " + discordId}`
+    );
+  }
   return jsonResponse(
     {
       found: true,

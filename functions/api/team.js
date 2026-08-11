@@ -13,7 +13,11 @@
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    // Public, read-mostly, not session-bound -- short edge cache instead
+    // of no-store so a burst of visitors doesn't each force a fresh DB
+    // round-trip. 15s is short enough that a High Command edit shows up
+    // for everyone within moments.
+    headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=15" },
   });
 }
 

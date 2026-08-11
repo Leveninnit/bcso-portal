@@ -45,12 +45,14 @@
  * roster entry's rank doesn't match one of the configured options), it
  * falls back to the roster's own manual order, exactly as before.
  */
-import { fetchRosterTable, lookupByBadge } from "../_lib/roster-sheet.js";
+import { fetchRosterTable, lookupByBadge, normalizeBadge } from "../_lib/roster-sheet.js";
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    // See functions/api/team.js for why this is a short public cache
+    // instead of no-store.
+    headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=15" },
   });
 }
 function normalizeRankLabel(value) {
@@ -124,7 +126,14 @@ export async function onRequestGet(context) {
         .all();
       const currentYm = new Date().toISOString().slice(0, 7);
       for (const row of logRows || []) {
-        const badge = (row.badge_number || "").trim();
+        // Normalized the same way lookupByBadge below matches roster
+        // entries to the Master Roster sheet -- badge numbers typed into
+        // the log form ("1042", "#1042", "b-1042") and the ones typed
+        // into a roster entry ("B-1042") can differ in case/punctuation
+        // while clearly meaning the same badge. Keying this map by the
+        // raw trimmed string (the old behavior) meant any such mismatch
+        // silently left that roster entry's Hours/Activations at 0.
+        const badge = normalizeBadge(row.badge_number);
         if (!badge) continue;
         let core = {};
         try {
@@ -153,7 +162,7 @@ export async function onRequestGet(context) {
     const table = await fetchRosterTable(env);
     const entries = rows.map((r) => {
       const person = table ? lookupByBadge(table, r.badge_number) : { found: false };
-      const badge = (r.badge_number || "").trim();
+      const badge = normalizeBadge(r.badge_number);
       const totals = allTime.get(badge) || { hours: 0, count: 0 };
       const monthTotals = thisMonth.get(badge) || { hours: 0, count: 0 };
       return {

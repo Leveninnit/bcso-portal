@@ -55,8 +55,19 @@ const FIELD_LIMITS = {
 const MIN_FORM_FILL_MS = 3000; // real humans take at least a few seconds
 function clean(value, maxLen) {
   if (typeof value !== "string") return "";
-  // Trim, collapse excessive whitespace, hard-truncate to Discord's limits.
-  return value.trim().replace(/\s+/g, " ").slice(0, maxLen);
+  // Trim, normalize line endings, collapse repeated horizontal whitespace
+  // per line, and collapse runs of 3+ blank lines down to one -- but
+  // preserve single intentional line breaks. Paragraph-style fields (Why
+  // do you want to join?, Relevant Experience, Shift Summary) used to get
+  // flattened to one giant line here because \s+ matched newlines too.
+  return value
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, maxLen);
 }
 function cleanAnswers(answers) {
   if (!answers || typeof answers !== "object") return {};

@@ -65,7 +65,18 @@ const MIN_FORM_FILL_MS = 3000; // real humans take at least a few seconds
 
 function clean(value, maxLen) {
   if (typeof value !== "string") return "";
-  return value.trim().replace(/\s+/g, " ").slice(0, maxLen);
+  // See apply.js's clean() for why this preserves single line breaks
+  // instead of collapsing all whitespace (including newlines) to one
+  // space -- that used to flatten multi-line Shift Summaries into a
+  // single unreadable line.
+  return value
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, maxLen);
 }
 
 function jsonResponse(body, status) {
@@ -439,7 +450,7 @@ export async function onRequestPost(context) {
   const crestUrl = `${origin}/assets/bcso-crest.png`;
   const fields = [
     { name: "Character Name", value: characterName, inline: true },
-    { name: "Discord Username", value: discordId, inline: true },
+    { name: "Discord ID", value: discordId, inline: true },
     { name: "Badge Number", value: badgeNumber, inline: true },
     { name: "Rank", value: rank, inline: true },
     { name: "Subdivision", value: subdivisionName, inline: true },

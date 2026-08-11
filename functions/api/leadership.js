@@ -15,7 +15,9 @@ const MAX_SLOTS = { teu: 3, ocd: 3, rtd: 3, nred: 1 };
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    // See functions/api/team.js for why this is a short public cache
+    // instead of no-store.
+    headers: { "Content-Type": "application/json", "Cache-Control": "public, max-age=15" },
   });
 }
 

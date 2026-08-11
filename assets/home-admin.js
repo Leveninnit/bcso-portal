@@ -109,9 +109,15 @@ async function loadAdmin() {
     fillDeputyForm("month", data.deputyOfMonth);
     renderPhotoRows(data.patrolPhotos || []);
 
-    document.getElementById("hoa-save").addEventListener("click", async () => {
+    const saveBtn = document.getElementById("hoa-save");
+    saveBtn.addEventListener("click", async () => {
       const saveStatus = document.getElementById("hoa-save-status");
       saveStatus.textContent = "Saving…";
+      // Disabled for the duration of the request -- team-admin.js's save
+      // buttons already do this; this one didn't, so a double-click (or
+      // a slow request plus an impatient second click) could fire two
+      // concurrent PUTs racing to write the same three site_content rows.
+      saveBtn.disabled = true;
       const payload = {
         deputyOfWeek: collectDeputy("week"),
         deputyOfMonth: collectDeputy("month"),
@@ -127,6 +133,8 @@ async function loadAdmin() {
         saveStatus.textContent = putRes.ok && putData && putData.ok ? "Saved." : (putData && putData.error) || "Failed to save.";
       } catch {
         saveStatus.textContent = "Failed to save. Check your connection.";
+      } finally {
+        saveBtn.disabled = false;
       }
       setTimeout(() => (saveStatus.textContent = ""), 3000);
     });

@@ -127,7 +127,11 @@
       crumbEl.textContent = sub.name;
       document.title = sub.name + " Application — BCSO";
       if (sub.requirements && sub.requirements.length) {
-        reqList.innerHTML = sub.requirements.map((r) => `<li>${r}</li>`).join("");
+        // Currently always a static, developer-authored array (never
+        // admin/API-editable), so this is inert today -- escaped anyway
+        // to match every other innerHTML sink in this file and stay safe
+        // if requirements ever become configurable later.
+        reqList.innerHTML = sub.requirements.map((r) => `<li>${escapeHtml(r)}</li>`).join("");
         reqPanel.style.display = "block";
       }
       document.getElementById("subdivisionSlug").value = sub.slug;

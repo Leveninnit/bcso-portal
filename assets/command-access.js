@@ -293,6 +293,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     const slug = activeSlug;
     try {
       const res = await fetch(`/api/admin/rank-options?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       const options = data.options || [];
       if (!options.length) {
@@ -418,17 +419,31 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         <button class="ca-btn-accept" id="ca-rk-save">Add rank</button>
       </div>
     `;
-    el("ca-rk-save").addEventListener("click", async () => {
+    const rkSaveBtn = el("ca-rk-save");
+    rkSaveBtn.addEventListener("click", async () => {
       const label = el("ca-rk-label").value.trim();
       if (!label) {
         alert("Please enter a rank name.");
         return;
       }
-      await fetch("/api/admin/rank-options", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subdivisionSlug: activeSlug, label, sortOrder: 9999 }),
-      });
+      rkSaveBtn.disabled = true;
+      try {
+        const res = await fetch("/api/admin/rank-options", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subdivisionSlug: activeSlug, label, sortOrder: 9999 }),
+        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          alert((data && data.error) || "Couldn't add that rank. Please try again.");
+          rkSaveBtn.disabled = false;
+          return;
+        }
+      } catch {
+        alert("Couldn't add that rank. Check your connection and try again.");
+        rkSaveBtn.disabled = false;
+        return;
+      }
       renderRankForm();
       loadRankOptions();
     });
@@ -466,6 +481,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     if (rosterRankOptionsCache[slug]) return rosterRankOptionsCache[slug];
     try {
       const res = await fetch(`/api/admin/rank-options?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       const labels = (data.options || []).map((o) => o.label);
       rosterRankOptionsCache[slug] = labels;
@@ -480,6 +496,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     const slug = activeSlug;
     try {
       const res = await fetch(`/api/admin/roster?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       const entries = data.entries || [];
       if (!entries.length) {
@@ -742,6 +759,16 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     return res.json();
   }
 
+  // Guards the "Load more" button against a stale response landing after
+  // the list has moved on to a different status filter / subdivision /
+  // form type -- without this, a "Load more" fetch that was still in
+  // flight when the filter changed would append its (now wrong-filter)
+  // results onto the freshly-loaded list once it finally resolved.
+  // loadSubmissions() bumps this every time it starts a fresh load; any
+  // in-flight "Load more" click checks its captured seq against the
+  // current value before touching the DOM.
+  let submissionsSeq = 0;
+
   function wireSubmissionActions(list, slug, status) {
     list.querySelectorAll("[data-action]").forEach((btn) => {
       if (btn.dataset.wired) return;
@@ -750,7 +777,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     });
   }
 
-  function renderLoadMoreButton(list, slug, type, status, nextOffset) {
+  function renderLoadMoreButton(list, slug, type, status, nextOffset, seq) {
     const old = list.parentElement.querySelector(".ca-load-more");
     if (old) old.remove();
     const btn = document.createElement("button");
@@ -763,16 +790,19 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       btn.textContent = "Loading…";
       try {
         const data = await fetchSubmissionsPage(slug, type, status, nextOffset);
+        if (seq !== submissionsSeq) return; // filter/subdivision changed while this was in flight
         const labels = await loadQuestionLabels(slug, type);
+        if (seq !== submissionsSeq) return;
         const html = (data.submissions || []).map((s) => renderSubmissionCard(s, labels)).join("");
         list.insertAdjacentHTML("beforeend", html);
         wireSubmissionActions(list, slug, status);
         if (data.hasMore) {
-          renderLoadMoreButton(list, slug, type, status, data.nextOffset);
+          renderLoadMoreButton(list, slug, type, status, data.nextOffset, seq);
         } else {
           btn.remove();
         }
       } catch {
+        if (seq !== submissionsSeq) return;
         btn.disabled = false;
         btn.textContent = "Couldn't load more — try again";
       }
@@ -783,6 +813,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   async function loadSubmissions(status) {
     const list = el("ca-submission-list");
     if (!list) return;
+    const seq = ++submissionsSeq;
     list.innerHTML = "Loading…";
     const existingLoadMore = list.parentElement.querySelector(".ca-load-more");
     if (existingLoadMore) existingLoadMore.remove();
@@ -791,7 +822,9 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   const highlightId = pendingHighlight;
     try {
       const data = await fetchSubmissionsPage(slug, type, status, 0);
+      if (seq !== submissionsSeq) return;
       const labels = await loadQuestionLabels(slug, type);
+      if (seq !== submissionsSeq) return;
       if (!data.submissions || !data.submissions.length) {
         list.innerHTML = `<p class="ca-muted">Nothing here.</p>`;
         pendingHighlight = null;
@@ -800,7 +833,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       list.innerHTML = data.submissions.map((s) => renderSubmissionCard(s, labels)).join("");
       wireSubmissionActions(list, slug, status);
       if (data.hasMore) {
-        renderLoadMoreButton(list, slug, type, status, data.nextOffset);
+        renderLoadMoreButton(list, slug, type, status, data.nextOffset, seq);
       }
     if (highlightId) {
       const card = list.querySelector(`[data-subid="${highlightId}"]`);
@@ -811,6 +844,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       pendingHighlight = null;
     }
     } catch {
+      if (seq !== submissionsSeq) return;
       list.innerHTML = `<p class="ca-muted">Couldn't load submissions. Try refreshing.</p>`;
     }
   }
@@ -921,11 +955,12 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     const type = activeFormType;
     try {
       const res = await fetch(`/api/admin/field-labels?div=${encodeURIComponent(slug)}&type=${type}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       const overrides = data.labels || {};
       box.innerHTML = FIELD_KEY_ORDER[type].map((fieldKey) => renderFieldLabelRow(fieldKey, overrides[fieldKey])).join("");
       box.querySelectorAll("[data-flaction]").forEach((btn) => {
-        btn.addEventListener("click", () => handleFieldLabelAction(btn.dataset.flaction, btn.dataset.field));
+        btn.addEventListener("click", () => handleFieldLabelAction(btn.dataset.flaction, btn.dataset.field, btn));
       });
     } catch {
       box.innerHTML = `<p class="ca-muted">Couldn't load original fields. Try refreshing.</p>`;
@@ -949,15 +984,27 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     `;
   }
 
-  async function handleFieldLabelAction(action, fieldKey) {
+  async function handleFieldLabelAction(action, fieldKey, btn) {
     const slug = activeSlug;
     const type = activeFormType;
     if (action === "reset") {
       if (!confirm(`Reset "${FIELD_KEY_DISPLAY[fieldKey]}" back to its default wording?`)) return;
-      await fetch(
-        `/api/admin/field-labels?div=${encodeURIComponent(slug)}&type=${type}&field=${encodeURIComponent(fieldKey)}`,
-        { method: "DELETE" }
-      );
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch(
+          `/api/admin/field-labels?div=${encodeURIComponent(slug)}&type=${type}&field=${encodeURIComponent(fieldKey)}`,
+          { method: "DELETE" }
+        );
+        if (!res.ok) {
+          alert("Couldn't reset that field. Please try again.");
+          if (btn) btn.disabled = false;
+          return;
+        }
+      } catch {
+        alert("Couldn't reset that field. Check your connection and try again.");
+        if (btn) btn.disabled = false;
+        return;
+      }
       loadFieldLabels();
       return;
     }
@@ -968,11 +1015,23 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         alert("Please enter a label.");
         return;
       }
-      await fetch("/api/admin/field-labels", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subdivisionSlug: slug, formType: type, fieldKey, label }),
-      });
+      if (btn) btn.disabled = true;
+      try {
+        const res = await fetch("/api/admin/field-labels", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ subdivisionSlug: slug, formType: type, fieldKey, label }),
+        });
+        if (!res.ok) {
+          alert("Couldn't save that label. Please try again.");
+          if (btn) btn.disabled = false;
+          return;
+        }
+      } catch {
+        alert("Couldn't save that label. Check your connection and try again.");
+        if (btn) btn.disabled = false;
+        return;
+      }
       loadFieldLabels();
     }
   }
@@ -983,6 +1042,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     const type = activeFormType;
     try {
       const res = await fetch(`/api/admin/questions?div=${encodeURIComponent(slug)}&type=${type}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       questionLabelCache[`${slug}:${type}`] = {};
       (data.questions || []).forEach((q) => (questionLabelCache[`${slug}:${type}`][q.id] = q.label));
@@ -1116,7 +1176,8 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     if (isEdit) {
       el("ca-q-cancel").addEventListener("click", () => renderQuestionForm(null));
     }
-    el("ca-q-save").addEventListener("click", async () => {
+    const qSaveBtn = el("ca-q-save");
+    qSaveBtn.addEventListener("click", async () => {
       const label = el("ca-q-label").value.trim();
       const questionType = el("ca-q-type").value;
       const required = el("ca-q-required").checked;
@@ -1139,14 +1200,25 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         options,
         required,
       };
-      if (isEdit) {
-        await putQuestion({ ...payload, id: editing.id, sortOrder: editing.sortOrder });
-      } else {
-        await fetch("/api/admin/questions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, sortOrder: 9999 }),
-        });
+      qSaveBtn.disabled = true;
+      try {
+        const res = isEdit
+          ? await putQuestion({ ...payload, id: editing.id, sortOrder: editing.sortOrder })
+          : await fetch("/api/admin/questions", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ ...payload, sortOrder: 9999 }),
+            });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          alert((data && data.error) || "Couldn't save that question. Please try again.");
+          qSaveBtn.disabled = false;
+          return;
+        }
+      } catch {
+        alert("Couldn't save that question. Check your connection and try again.");
+        qSaveBtn.disabled = false;
+        return;
       }
       renderQuestionForm(null);
       loadQuestions();
@@ -1177,6 +1249,7 @@ async function loadDocuments() {
   const slug = activeSlug;
   try {
     const res = await fetch(`/api/admin/documents?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
+    if (!res.ok) throw new Error("request failed");
     const data = await res.json();
     if (!data.documents || !data.documents.length) {
       list.innerHTML = `<p class="ca-muted">No documents yet.</p>`;
@@ -1282,7 +1355,8 @@ function renderDocumentForm(editing) {
   if (isEdit) {
     el("ca-d-cancel").addEventListener("click", () => renderDocumentForm(null));
   }
-  el("ca-d-save").addEventListener("click", async () => {
+  const dSaveBtn = el("ca-d-save");
+  dSaveBtn.addEventListener("click", async () => {
     const name = el("ca-d-name").value.trim();
     const description = el("ca-d-description").value.trim();
     const url = el("ca-d-url").value.trim();
@@ -1300,14 +1374,25 @@ function renderDocumentForm(editing) {
       description,
       url,
     };
-    if (isEdit) {
-      await putDocument({ ...payload, id: editing.id, sortOrder: editing.sortOrder });
-    } else {
-      await fetch("/api/admin/documents", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...payload, sortOrder: 9999 }),
-      });
+    dSaveBtn.disabled = true;
+    try {
+      const res = isEdit
+        ? await putDocument({ ...payload, id: editing.id, sortOrder: editing.sortOrder })
+        : await fetch("/api/admin/documents", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ ...payload, sortOrder: 9999 }),
+          });
+      if (!res.ok) {
+        const data = await res.json().catch(() => null);
+        alert((data && data.error) || "Couldn't save that document. Please try again.");
+        dSaveBtn.disabled = false;
+        return;
+      }
+    } catch {
+      alert("Couldn't save that document. Check your connection and try again.");
+      dSaveBtn.disabled = false;
+      return;
     }
     renderDocumentForm(null);
     loadDocuments();
@@ -1337,6 +1422,7 @@ function renderDocumentForm(editing) {
     `;
     try {
       const res = await fetch(`/api/admin/leadership?div=${encodeURIComponent(activeSlug)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       renderLeadershipSlots(data.leadership || [], maxSlots);
     } catch {
@@ -1452,6 +1538,7 @@ function renderDocumentForm(editing) {
     try {
       const qs = scope ? `?div=${encodeURIComponent(scope)}` : "";
       const res = await fetch(`/api/admin/movement-templates${qs}`, { cache: "no-store" });
+      if (!res.ok) throw new Error("request failed");
       const data = await res.json();
       movementTemplatesCacheByScope[key] = data.templates || [];
     } catch {
@@ -1763,7 +1850,8 @@ function renderDocumentForm(editing) {
     if (isEdit) {
       el("ca-mv-t-cancel").addEventListener("click", () => renderMovementTemplateForm(null, scope));
     }
-    el("ca-mv-t-save").addEventListener("click", async () => {
+    const mvSaveBtn = el("ca-mv-t-save");
+    mvSaveBtn.addEventListener("click", async () => {
       const name = el("ca-mv-t-name").value.trim();
       const roleIds = el("ca-mv-t-roles")
         .value.split(",")
@@ -1779,18 +1867,25 @@ function renderDocumentForm(editing) {
       }
       const payload = { name, roleIds };
       if (scope) payload.subdivisionSlug = scope;
-      if (isEdit) {
-        await fetch("/api/admin/movement-templates", {
-          method: "PUT",
+      mvSaveBtn.disabled = true;
+      try {
+        const res = await fetch("/api/admin/movement-templates", {
+          method: isEdit ? "PUT" : "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, id: editing.id, sortOrder: editing.sortOrder }),
+          body: JSON.stringify(
+            isEdit ? { ...payload, id: editing.id, sortOrder: editing.sortOrder } : { ...payload, sortOrder: 9999 }
+          ),
         });
-      } else {
-        await fetch("/api/admin/movement-templates", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ ...payload, sortOrder: 9999 }),
-        });
+        if (!res.ok) {
+          const data = await res.json().catch(() => null);
+          alert((data && data.error) || "Couldn't save that template. Please try again.");
+          mvSaveBtn.disabled = false;
+          return;
+        }
+      } catch {
+        alert("Couldn't save that template. Check your connection and try again.");
+        mvSaveBtn.disabled = false;
+        return;
       }
       movementTemplatesCacheByScope = {};
       renderMovementTemplateForm(null, scope);

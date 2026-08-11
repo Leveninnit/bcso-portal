@@ -38,8 +38,41 @@
  * data that lives elsewhere, never something that should break a page.
  */
 
+// Google Sheets sometimes stores a long numeric-looking cell (a Discord
+// ID typed or pasted without forcing Text format) as a Number, which
+// then reads/exports as scientific notation, e.g.
+// "3.72504974311633E+17" instead of the literal digit string. Expands
+// that back into a plain digit string by shifting the decimal point
+// according to the exponent -- done with plain string math, not
+// Number(), so it doesn't introduce any *additional* rounding beyond
+// whatever Sheets already baked into the notation. Returns null if the
+// string isn't scientific notation.
+//
+// NOTE: this can't recover precision Sheets already lost. Discord IDs
+// are 17-19 digits, well past a float64's ~15-17 significant digits, so
+// if the sheet cell is formatted as a Number (not Text), some of the
+// least-significant digits may already be wrong/zeroed by the time this
+// ever sees them. The only real fix is formatting that column as Text
+// in the sheet; this just stops making an already-imprecise value worse.
+function expandScientificNotation(str) {
+  const m = /^(-?)(\d+)(?:\.(\d+))?e\+?(\d+)$/i.exec(str.trim());
+  if (!m) return null;
+  const [, sign, intPart, fracPart = "", expStr] = m;
+  const exp = parseInt(expStr, 10);
+  const digits = intPart + fracPart;
+  const pointPos = intPart.length + exp;
+  const result =
+    pointPos >= digits.length ? digits + "0".repeat(pointPos - digits.length) : digits.slice(0, pointPos) + "." + digits.slice(pointPos);
+  return sign + result;
+}
+
 export function normalizeId(value) {
-  return (value || "").toString().replace(/[^0-9]/g, "");
+  let str = (value || "").toString().trim();
+  if (/^-?\d+(\.\d+)?e\+?\d+$/i.test(str)) {
+    const expanded = expandScientificNotation(str);
+    if (expanded) str = expanded;
+  }
+  return str.replace(/[^0-9]/g, "");
 }
 
 // Loose match for badge numbers: strips everything except letters and
@@ -155,6 +188,16 @@ async function fetchViaCsvExport(sheetId, gid) {
   }
 }
 
+// Module-scope cache, same idea (and same isolate-reuse caveat) as
+// resolveWebhookChannelId's cache in discord.js. The roster sheet is read
+// on essentially every Apply/Log form autofill (both Discord ID blur AND
+// Badge Number blur) plus every Roster page view -- without this, a
+// member re-typing/correcting one character in a field could trigger a
+// fresh full-sheet fetch+parse per keystroke-triggered blur. A short TTL
+// keeps this from ever being more than a couple minutes stale.
+let rosterTableCache = null; // { result, at }
+const ROSTER_TABLE_CACHE_TTL_MS = 2 * 60 * 1000; // 2 minutes
+
 // Fetches + parses the Master Roster sheet once. Returns null if it
 // isn't configured or the fetch/parse fails for any reason — callers
 // should treat null exactly like "nothing found."
@@ -163,10 +206,16 @@ export async function fetchRosterTable(env, { debug = false } = {}) {
   if (!sheetId) {
     return debug ? { rows: null, debug: "ROSTER_SHEET_ID not set" } : null;
   }
+  // debug mode always does a live fetch -- the whole point is diagnosing
+  // what's actually coming back from the sheet right now.
+  if (!debug && rosterTableCache && Date.now() - rosterTableCache.at < ROSTER_TABLE_CACHE_TTL_MS) {
+    return rosterTableCache.result;
+  }
   const result = env.GOOGLE_SHEETS_API_KEY
     ? await fetchViaSheetsApi(sheetId, env.GOOGLE_SHEETS_API_KEY, env.ROSTER_SHEET_TAB)
     : await fetchViaCsvExport(sheetId, env.ROSTER_SHEET_GID);
   if (!result.rows) return debug ? result : null;
+  if (!debug) rosterTableCache = { result, at: Date.now() };
   return result;
 }
 
@@ -185,14 +234,28 @@ export function lookupByDiscordId(table, discordId) {
   if (!table || table.idxDiscordId === -1) return { found: false };
   const target = normalizeId(discordId);
   if (!target) return { found: false };
-  const match = table.rows.slice(1).find((r) => normalizeId(r[table.idxDiscordId]) === target);
-  return match ? personFromRow(table, match) : { found: false };
+  // .find() only ever returns the first match. If the sheet has more than
+  // one row with the same Discord ID (a copy/paste duplicate, someone
+  // re-added instead of edited, etc.), earlier code would pick one of
+  // them with no indication the match was ambiguous -- possibly
+  // resolving to the wrong person's badge/rank silently. `ambiguous: true`
+  // lets callers at least log/flag it instead of trusting it blindly; the
+  // first match is still returned so behavior otherwise doesn't change.
+  const matches = table.rows.slice(1).filter((r) => normalizeId(r[table.idxDiscordId]) === target);
+  if (!matches.length) return { found: false };
+  const result = personFromRow(table, matches[0]);
+  if (matches.length > 1) result.ambiguous = true;
+  return result;
 }
 
 export function lookupByBadge(table, badgeNumber) {
   if (!table || table.idxBadge === -1) return { found: false };
   const target = normalizeBadge(badgeNumber);
   if (!target) return { found: false };
-  const match = table.rows.slice(1).find((r) => normalizeBadge(r[table.idxBadge]) === target);
-  return match ? personFromRow(table, match) : { found: false };
+  // See the duplicate-match note in lookupByDiscordId above.
+  const matches = table.rows.slice(1).filter((r) => normalizeBadge(r[table.idxBadge]) === target);
+  if (!matches.length) return { found: false };
+  const result = personFromRow(table, matches[0]);
+  if (matches.length > 1) result.ambiguous = true;
+  return result;
 }

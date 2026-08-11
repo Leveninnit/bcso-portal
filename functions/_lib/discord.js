@@ -18,6 +18,16 @@ export const GUILD_ID = "1531851660798857216";
 // Holding this role lets someone log into Command Access at all.
 export const COMMAND_LOGIN_ROLE_ID = "1531995929585123459";
 
+// High Command spans every subdivision rather than granting one specific
+// subdivision's command rights, so it isn't part of
+// SUBDIVISION_COMMAND_ROLES below -- it's checked separately (see
+// functions/api/auth/callback.js, the only place that reads this) and
+// gets baked into the session as the isHighCommand flag, which is what
+// functions/api/admin/team.js and site-content.js actually check.
+// Centralized here (rather than inline in callback.js) so there's exactly
+// one place to update if this role ID ever changes.
+export const HIGH_COMMAND_ROLE_ID = "1533008196023746591";
+
 // Maps a subdivision slug to the Discord role ID that grants "command"
 // rights for that subdivision specifically (customize its questions,
 // view/accept/reject/delete its applications and logs). Add a line here
@@ -189,14 +199,31 @@ export function resolveWebhookUrl(env, formType, subdivisionSlug) {
  * failure so a lookup problem never blocks the underlying submission
  * (the caller treats a null channelId as "couldn't post").
  */
+// Module-scope cache: a Cloudflare Workers isolate is commonly reused
+// across many requests before it's recycled, so a plain in-memory Map
+// here works as a cheap best-effort cache without needing KV or any
+// other storage binding. A webhook's channel essentially never changes,
+// so this used to mean *every single* application/log submission paid
+// for a full round-trip to Discord's API just to re-learn the same
+// channel id it already knew from the last submission. Falls back to a
+// live lookup on a cold isolate or a cache miss, exactly as before.
+const webhookChannelIdCache = new Map();
+const WEBHOOK_CHANNEL_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
 export async function resolveWebhookChannelId(webhookUrl) {
   const parsed = parseWebhookUrl(webhookUrl);
   if (!parsed) return null;
+  const cached = webhookChannelIdCache.get(parsed.id);
+  if (cached && Date.now() - cached.at < WEBHOOK_CHANNEL_CACHE_TTL_MS) {
+    return cached.channelId;
+  }
   try {
     const res = await fetch(`https://discord.com/api/webhooks/${parsed.id}/${parsed.token}`);
     if (!res.ok) return null;
     const data = await res.json().catch(() => null);
-    return data?.channel_id || null;
+    const channelId = data?.channel_id || null;
+    if (channelId) webhookChannelIdCache.set(parsed.id, { channelId, at: Date.now() });
+    return channelId;
   } catch {
     return null;
   }

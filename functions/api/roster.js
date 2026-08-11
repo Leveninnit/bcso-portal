@@ -37,6 +37,12 @@
  * Same for Hours/Activations/Activity if the Activity Log lookup fails
  * — they fall back to 0/0/Inactive rather than breaking the page.
  *
+ * Also returns lastUpdated ({ by, at } or null): who last added, edited,
+ * reordered, or removed an entry on this subdivision's Roster, and when
+ * — see content_meta ("roster:<slug>") in functions/_lib/content-meta.js
+ * and functions/api/admin/roster.js, which records it on every write.
+ *
+
  * Sort order: if the subdivision has a Rank list configured (Command
  * Access -> that subdivision -> Ranks), the roster is sorted by that
  * rank hierarchy — highest rank first — with
@@ -46,6 +52,7 @@
  * falls back to the roster's own manual order, exactly as before.
  */
 import { fetchRosterTable, lookupByBadge, normalizeBadge } from "../_lib/roster-sheet.js";
+import { getContentMeta } from "../_lib/content-meta.js";
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
@@ -75,7 +82,7 @@ export async function onRequestGet(context) {
   const url = new URL(request.url);
   const div = url.searchParams.get("div");
   if (!div || !env.DB) {
-    return jsonResponse({ entries: [] }, 200);
+    return jsonResponse({ entries: [], lastUpdated: null }, 200);
   }
   try {
     const { results } = await env.DB.prepare(
@@ -84,7 +91,8 @@ export async function onRequestGet(context) {
       .bind(div)
       .all();
     const rows = results || [];
-    if (!rows.length) return jsonResponse({ entries: [] }, 200);
+    const lastUpdated = await getContentMeta(env, `roster:${div}`);
+    if (!rows.length) return jsonResponse({ entries: [], lastUpdated }, 200);
 
     let rankPosition = null;
     try {
@@ -177,10 +185,10 @@ export async function onRequestGet(context) {
         activityLevel: activityLevelFor(monthTotals.hours, monthTotals.count),
       };
     });
-    return jsonResponse({ entries }, 200);
+    return jsonResponse({ entries, lastUpdated }, 200);
   } catch (err) {
     console.error("Failed to load roster (non-fatal):", err);
-    return jsonResponse({ entries: [] }, 200);
+    return jsonResponse({ entries: [], lastUpdated: null }, 200);
   }
 }
 export async function onRequestPost() {

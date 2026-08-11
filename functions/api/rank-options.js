@@ -7,11 +7,14 @@
  * in order. Used by:
  *   - log.html          - renders a dropdown instead of a free-text Rank
  *                          field once at least one option exists.
- *   - ranks.html         - shows the subdivision's rank hierarchy publicly,
- *                          highest to lowest, in this same order.
- * The Roster on each subdivision's Documents page is also sorted using
- * this same order (see functions/api/roster.js), so this list is now the
- * single source of truth for "what order do ranks go in" everywhere.
+ *   - Command Access's Roster form (assets/command-access.js) - same
+ *                          deal, a dropdown instead of free text.
+ * The public Roster on each subdivision's Roster page is also sorted
+ * using this same order (see functions/api/roster.js), so this list is
+ * the single source of truth for "what order do ranks go in" everywhere.
+ * (There used to be a public ranks.html hierarchy page too — it's been
+ * removed; this list's only consumers now are the two dropdowns above
+ * and the Roster sort.)
  *
  * Returns an empty list (never an error) if nothing's configured yet, if
  * the database isn't set up, or if anything goes wrong — every consumer

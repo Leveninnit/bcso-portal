@@ -2,9 +2,9 @@
  * Cloudflare Pages Function
  * GET /api/roster?div=slug
  *
- * Public, read-only: powers the Roster section on each subdivision's
- * Documents page (documents.html?div=slug). Every subdivision has one,
- * including SRT.
+ * Public, read-only: powers each subdivision's own Roster page
+ * (roster.html?div=slug), linked from the "Main Roster" card on that
+ * subdivision's Documents page. Every subdivision has one, including SRT.
  *
  * Command staff only enter a Rank + Badge Number (+ optional Notes) per
  * entry, from Command Access -> that subdivision -> Roster (see
@@ -38,8 +38,8 @@
  * — they fall back to 0/0/Inactive rather than breaking the page.
  *
  * Sort order: if the subdivision has a Rank list configured (Command
- * Access -> that subdivision -> Ranks, also shown on ranks.html), the
- * roster is sorted by that rank hierarchy — highest rank first — with
+ * Access -> that subdivision -> Ranks), the roster is sorted by that
+ * rank hierarchy — highest rank first — with
  * each roster entry's own manual up/down order used only as a
  * tiebreaker within the same rank. If no rank list is configured (or a
  * roster entry's rank doesn't match one of the configured options), it

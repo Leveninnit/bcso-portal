@@ -214,10 +214,35 @@
     el.classList.remove("show");
   }
 
-  // Auto-fill character name / badge / rank from the Master Roster when
-  // the Discord ID field loses focus. This is a convenience only — any
-  // failure (roster not configured, no match, network error) just
-  // leaves the fields as-is for manual entry.
+  // Auto-fill character name / badge / Discord ID / rank from the Master
+  // Roster for the person SUBMITTING the log — triggered from either the
+  // Discord ID field OR the Badge Number field, whichever the member
+  // fills in first (see handleDiscordIdBlur / handleBadgeNumberBlur
+  // below). This is a convenience only — any failure (roster not
+  // configured, no match, network error) just leaves the fields as-is
+  // for manual entry.
+  function applySubmitterAutofill(data) {
+    const note = document.getElementById("autofill-note");
+    if (data.name) document.getElementById("characterName").value = data.name;
+    if (data.badgeNumber) document.getElementById("badgeNumber").value = data.badgeNumber;
+    if (data.discordId) document.getElementById("discordId").value = data.discordId;
+    if (data.rank) {
+      const slug = document.getElementById("subdivisionSlug").value;
+      if (isRtdSlug(slug)) {
+        const rtdRank = document.getElementById("rtdRank");
+        const match = Array.from(rtdRank.options).find(
+          (o) => o.value.toLowerCase() === data.rank.toLowerCase()
+        );
+        if (match) rtdRank.value = match.value;
+      } else {
+        document.getElementById("rank").value = data.rank;
+      }
+    }
+    note.textContent = "✓ Auto-filled from Master Roster";
+    note.style.color = "var(--success)";
+    note.style.display = "inline";
+  }
+
   async function handleDiscordIdBlur() {
     const discordId = document.getElementById("discordId").value.trim();
     const note = document.getElementById("autofill-note");
@@ -226,28 +251,69 @@
     try {
       const res = await fetch("/api/roster-lookup?discordId=" + encodeURIComponent(discordId));
       const data = await res.json().catch(() => ({}));
-      if (data.found) {
-        if (data.name) document.getElementById("characterName").value = data.name;
-        if (data.badgeNumber) document.getElementById("badgeNumber").value = data.badgeNumber;
-        if (data.rank) {
-          const slug = document.getElementById("subdivisionSlug").value;
-          if (isRtdSlug(slug)) {
-            const rtdRank = document.getElementById("rtdRank");
-            const match = Array.from(rtdRank.options).find(
-              (o) => o.value.toLowerCase() === data.rank.toLowerCase()
-            );
-            if (match) rtdRank.value = match.value;
-          } else {
-            document.getElementById("rank").value = data.rank;
-          }
-        }
-        note.textContent = "✓ Auto-filled from Master Roster";
-        note.style.color = "var(--success)";
-        note.style.display = "inline";
-      }
+      if (data.found) applySubmitterAutofill(data);
     } catch {
       // Roster lookup is a convenience — ignore failures quietly.
     }
+  }
+
+  async function handleBadgeNumberBlur() {
+    const badgeNumber = document.getElementById("badgeNumber").value.trim();
+    const note = document.getElementById("autofill-note");
+    note.style.display = "none";
+    if (!badgeNumber) return;
+    try {
+      const res = await fetch("/api/roster-lookup?badgeNumber=" + encodeURIComponent(badgeNumber));
+      const data = await res.json().catch(() => ({}));
+      if (data.found) applySubmitterAutofill(data);
+    } catch {
+      // Roster lookup is a convenience — ignore failures quietly.
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // RTD-only paired Badge Number + Discord ID fields (FTO, Cadets #1-4,
+  // Supervised person). These are a DIFFERENT person than whoever is
+  // submitting the log, so each pair gets its own independent lookup —
+  // filling in Badge Number looks up and fills Discord ID, and vice
+  // versa. Same convenience/fails-soft behavior as the fields above;
+  // there's no name/rank to show for these, just the cross-fill.
+  // ------------------------------------------------------------------
+  function wireBadgeDiscordPair(badgeFieldId, discordFieldId) {
+    const badgeEl = document.getElementById(badgeFieldId);
+    const discordEl = document.getElementById(discordFieldId);
+    if (!badgeEl || !discordEl) return;
+    badgeEl.addEventListener("blur", async () => {
+      const badge = badgeEl.value.trim();
+      if (!badge) return;
+      try {
+        const res = await fetch("/api/roster-lookup?badgeNumber=" + encodeURIComponent(badge));
+        const data = await res.json().catch(() => ({}));
+        if (data.found && data.discordId) discordEl.value = data.discordId;
+      } catch {
+        // Convenience only — ignore failures quietly.
+      }
+    });
+    discordEl.addEventListener("blur", async () => {
+      const discordId = discordEl.value.trim();
+      if (!discordId) return;
+      try {
+        const res = await fetch("/api/roster-lookup?discordId=" + encodeURIComponent(discordId));
+        const data = await res.json().catch(() => ({}));
+        if (data.found && data.badgeNumber) badgeEl.value = data.badgeNumber;
+      } catch {
+        // Convenience only — ignore failures quietly.
+      }
+    });
+  }
+
+  function setupRtdPairAutofill() {
+    wireBadgeDiscordPair("ftoBadge", "ftoDiscordId");
+    wireBadgeDiscordPair("cadet1Badge", "cadet1Discord");
+    wireBadgeDiscordPair("cadet2Badge", "cadet2Discord");
+    wireBadgeDiscordPair("cadet3Badge", "cadet3Discord");
+    wireBadgeDiscordPair("cadet4Badge", "cadet4Discord");
+    wireBadgeDiscordPair("supervisedBadge", "supervisedDiscordId");
   }
 
   async function handleSubmit(e) {
@@ -334,6 +400,8 @@
   document.addEventListener("DOMContentLoaded", () => {
     initPage();
     document.getElementById("discordId").addEventListener("blur", handleDiscordIdBlur);
+    document.getElementById("badgeNumber").addEventListener("blur", handleBadgeNumberBlur);
+    setupRtdPairAutofill();
     document.getElementById("log-form").addEventListener("submit", handleSubmit);
   });
 })();

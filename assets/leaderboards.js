@@ -125,7 +125,10 @@ function renderPeopleList(containerId, people, metricKey, metricSuffix, query) {
     return;
   }
 
-  const podium = renderPodium(filtered.slice(0, 3), metricKey, metricSuffix, currentDiv === "all", "characterName", "badgeNumber", null);
+  // Individual (person) entries never show a subdivision tag, even in the
+  // Global view — that tag only makes sense on the "Top Subdivisions"
+  // board, where subdivisions themselves (not people) are being ranked.
+  const podium = renderPodium(filtered.slice(0, 3), metricKey, metricSuffix, false, "characterName", "badgeNumber", null);
   const rest = filtered.slice(3);
   const restHtml = rest.length
     ? `<div class="lb-list">
@@ -137,7 +140,6 @@ function renderPeopleList(containerId, people, metricKey, metricSuffix, query) {
               ${rankBadge(i + 3)}
               <span class="lb-name">${escapeHtml(p.characterName)}</span>
               <span class="lb-badge-num">#${escapeHtml(p.badgeNumber)}</span>
-              ${currentDiv === "all" ? `<span class="lb-sub-tag">${escapeHtml(subShort(p.subdivisionSlug))}</span>` : ""}
               <span class="lb-value">${value}${metricSuffix}</span>
             </div>`;
           })
@@ -183,6 +185,8 @@ function renderLogList(query) {
     el.innerHTML = `<p class="lb-empty">No activity logs to show for this view.</p>`;
     return;
   }
+  // Same rule as the person leaderboards above: individual entries don't
+  // get a subdivision tag, even in the Global view.
   el.innerHTML = entries
     .map(
       (e) => `
@@ -190,7 +194,6 @@ function renderLogList(query) {
           <div class="lb-log-head">
             <strong>${escapeHtml(e.characterName)}</strong>
             <span class="lb-badge-num">#${escapeHtml(e.badgeNumber)}</span>
-            ${currentDiv === "all" ? `<span class="lb-sub-tag">${escapeHtml(subShort(e.subdivisionSlug))}</span>` : ""}
             <span class="lb-log-hours">${formatHours(e.hours)}h</span>
             <span class="lb-log-date">${escapeHtml(formatDate(e.createdAt))}</span>
           </div>

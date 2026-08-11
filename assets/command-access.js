@@ -245,16 +245,18 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
 
   // ---------------------------------------------------------------------
   // Ranks — per-subdivision, ordered list of ranks. Powers the Activity
-  // Log form's Rank dropdown, the public ranks.html hierarchy page, and
-  // the sort order of this subdivision's public Roster (highest rank
-  // first) — see functions/api/roster.js and functions/api/rank-options.js.
+  // Log form's Rank dropdown, the Roster form's Rank dropdown, and the
+  // sort order of this subdivision's public Roster (highest rank first)
+  // — see functions/api/roster.js and functions/api/rank-options.js.
+  // There's no public Ranks page anymore (removed) — this list is only
+  // ever consumed by these dropdowns and the Roster sort.
   // ---------------------------------------------------------------------
   async function renderRanksPanel() {
     const panel = el("ca-panel");
     panel.innerHTML = `
       <div class="panel">
         <p class="ca-section-title">Rank Options</p>
-        <p class="ca-muted">${activeSlug === "rtd" ? "RTD already has its own dedicated Rank dropdown (kept in sync with the Google Sheet) and doesn't use this list." : `Add the ranks deputies can pick from on ${subInfo(activeSlug).short}'s Activity Log form. Order matters: arrange these highest to lowest — this same order is shown publicly on the Ranks page and is used to sort ${subInfo(activeSlug).short}'s Roster. Leave this empty to keep the original free-text Rank field (and manual Roster order).`}</p>
+        <p class="ca-muted">${activeSlug === "rtd" ? "RTD already has its own dedicated Rank dropdown (kept in sync with the Google Sheet) and doesn't use this list." : `Add the ranks deputies can pick from on ${subInfo(activeSlug).short}'s Activity Log and Roster forms. Order matters: arrange these highest to lowest — it's used to sort ${subInfo(activeSlug).short}'s Roster and controls what shows up in both Rank dropdowns. Leave this empty to keep the original free-text Rank fields (and manual Roster order).`}</p>
         <div id="ca-rank-list">Loading…</div>
         <div class="ca-question-form" id="ca-add-rank-form"></div>
       </div>
@@ -355,7 +357,8 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
 
   // ---------------------------------------------------------------------
   // Roster — every subdivision's own member roster (including SRT),
-  // shown publicly on that subdivision's Documents page. Each entry is
+  // shown publicly on that subdivision's own Roster page
+  // (roster.html?div=slug, linked from its Documents page). Each entry is
   // just a Rank + Badge Number (+ optional Notes) — Character Name,
   // Discord ID, and Department Status (Active / LOA / Inactive, etc.)
   // are resolved live from the Master Roster sheet by badge number, and
@@ -364,14 +367,14 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   // the public roster is loaded (see functions/api/roster.js), so
   // nothing here goes stale on its own.
   // ---------------------------------------------------------------------
-  let rosterRankOptionsCache = {}; // slug -> string[] (for the Rank autocomplete)
+  let rosterRankOptionsCache = {}; // slug -> string[] (for the Rank dropdown)
 
   async function renderRosterPanel() {
     const panel = el("ca-panel");
     panel.innerHTML = `
       <div class="panel">
         <p class="ca-section-title">${subInfo(activeSlug).short} Roster</p>
-        <p class="ca-muted">Shown publicly on the ${subInfo(activeSlug).short} Documents page. Add each member's Rank and Badge Number — their Character Name and Discord ID are pulled automatically from the Master Roster by badge number, so you never have to type or update those here. Reorder with the arrows, exactly how you want the roster to read top to bottom.</p>
+        <p class="ca-muted">Shown publicly on the ${subInfo(activeSlug).short} Roster page (linked from Documents). Add each member's Rank and Badge Number — their Character Name and Discord ID are pulled automatically from the Master Roster by badge number, so you never have to type or update those here. Drag rows to reorder, exactly how you want the roster to read top to bottom — it saves as soon as you drop.</p>
         <div id="ca-roster-list">Loading…</div>
         <div class="ca-question-form" id="ca-add-roster-form"></div>
       </div>
@@ -380,7 +383,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     await loadRosterEntries();
   }
 
-  async function loadRankOptionsForDatalist(slug) {
+  async function loadRankOptionsForRoster(slug) {
     if (rosterRankOptionsCache[slug]) return rosterRankOptionsCache[slug];
     try {
       const res = await fetch(`/api/admin/rank-options?div=${encodeURIComponent(slug)}`, { cache: "no-store" });
@@ -406,15 +409,16 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       }
       list.innerHTML = entries
         .map(
-          (e, i) => `
-          <div class="ca-question-row" data-entry-id="${e.id}">
-            <div>
-              <strong>${escapeHtml(e.rank || "(no rank set)")}</strong> &middot; Badge ${escapeHtml(e.badgeNumber)}
-              ${e.notes ? `<div class="ca-question-meta">${escapeHtml(e.notes)}</div>` : ""}
+          (e) => `
+          <div class="ca-question-row ca-roster-row" data-entry-id="${e.id}" draggable="true">
+            <div class="ca-roster-row-main">
+              <span class="ca-drag-handle" title="Drag to reorder" aria-hidden="true">⠿</span>
+              <div>
+                <strong>${escapeHtml(e.rank || "(no rank set)")}</strong> &middot; Badge ${escapeHtml(e.badgeNumber)}
+                ${e.notes ? `<div class="ca-question-meta">${escapeHtml(e.notes)}</div>` : ""}
+              </div>
             </div>
             <div class="ca-actions">
-              <button class="ca-btn-delete" data-rsaction="up" data-rsid="${e.id}" ${i === 0 ? "disabled" : ""}>↑</button>
-              <button class="ca-btn-delete" data-rsaction="down" data-rsid="${e.id}" ${i === entries.length - 1 ? "disabled" : ""}>↓</button>
               <button class="ca-btn-accept" data-rsaction="edit" data-rsid="${e.id}">Edit</button>
               <button class="ca-btn-reject" data-rsaction="delete" data-rsid="${e.id}">Delete</button>
             </div>
@@ -425,6 +429,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       list.querySelectorAll("[data-rsaction]").forEach((btn) => {
         btn.addEventListener("click", () => handleRosterAction(btn.dataset.rsaction, entries, btn.dataset.rsid));
       });
+      setupRosterDragReorder(list, entries);
     } catch {
       list.innerHTML = `<p class="ca-muted">Couldn't load the roster. Try refreshing.</p>`;
     }
@@ -444,12 +449,66 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       el("ca-add-roster-form").scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
-    const idx = entries.findIndex((x) => String(x.id) === String(id));
-    const swapIdx = action === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= entries.length) return;
-    const other = entries[swapIdx];
-    await Promise.all([putRosterEntry({ ...e, sortOrder: other.sortOrder }), putRosterEntry({ ...other, sortOrder: e.sortOrder })]);
-    loadRosterEntries();
+  }
+
+  // Drag-and-drop reordering — replaces the old ↑/↓ buttons. Drag a row
+  // by its ⠿ handle (or anywhere on the row) and drop it on another row
+  // to move it there; the new order is saved immediately on drop (every
+  // entry's sortOrder is rewritten to its new position), then the list
+  // reloads from the server to confirm — no separate "Save order" step.
+  let rosterDragId = null;
+  function setupRosterDragReorder(list, entries) {
+    list.querySelectorAll(".ca-roster-row").forEach((row) => {
+      row.addEventListener("dragstart", (ev) => {
+        rosterDragId = row.dataset.entryId;
+        row.classList.add("ca-dragging");
+        if (ev.dataTransfer) {
+          ev.dataTransfer.effectAllowed = "move";
+          try {
+            ev.dataTransfer.setData("text/plain", row.dataset.entryId);
+          } catch {}
+        }
+      });
+      row.addEventListener("dragend", () => {
+        rosterDragId = null;
+        list.querySelectorAll(".ca-roster-row").forEach((r) => {
+          r.classList.remove("ca-dragging");
+          r.classList.remove("ca-drag-over");
+        });
+      });
+      row.addEventListener("dragover", (ev) => {
+        if (!rosterDragId || rosterDragId === row.dataset.entryId) return;
+        ev.preventDefault();
+        if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+        row.classList.add("ca-drag-over");
+      });
+      row.addEventListener("dragleave", () => {
+        row.classList.remove("ca-drag-over");
+      });
+      row.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        row.classList.remove("ca-drag-over");
+        if (!rosterDragId || rosterDragId === row.dataset.entryId) return;
+        reorderRosterEntries(entries, rosterDragId, row.dataset.entryId);
+      });
+    });
+  }
+
+  async function reorderRosterEntries(entries, draggedId, targetId) {
+    const fromIdx = entries.findIndex((x) => String(x.id) === String(draggedId));
+    const toIdx = entries.findIndex((x) => String(x.id) === String(targetId));
+    if (fromIdx === -1 || toIdx === -1) return;
+    const reordered = entries.slice();
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    const list = el("ca-roster-list");
+    list.style.opacity = "0.6";
+    try {
+      await Promise.all(reordered.map((e, i) => putRosterEntry({ ...e, sortOrder: i })));
+    } finally {
+      list.style.opacity = "";
+      loadRosterEntries();
+    }
   }
 
   function putRosterEntry(e) {
@@ -471,16 +530,31 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   // object when editing one in place.
   async function renderRosterForm(editing) {
     const formBox = el("ca-add-roster-form");
-    const rankOptions = await loadRankOptionsForDatalist(activeSlug);
+    const rankOptions = await loadRankOptionsForRoster(activeSlug);
+    // Real <select> once the subdivision has Ranks configured (Command
+    // Access -> Ranks) — keeps roster entries matching an actual rank so
+    // the public Roster sorts correctly. Falls back to free text if
+    // nothing's configured yet, same as before. If an entry being edited
+    // has a rank that's no longer in the list (renamed/removed since),
+    // it's added as an extra option so saving doesn't silently blank it.
+    const currentRank = editing ? (editing.rank || "") : "";
+    const staleCurrentRank = currentRank && !rankOptions.includes(currentRank);
+    const rankFieldHtml = rankOptions.length
+      ? `<select id="ca-rs-rank">
+          <option value="">— No rank set —</option>
+          ${staleCurrentRank ? `<option value="${escapeHtml(currentRank)}" selected>${escapeHtml(currentRank)} (no longer in the list)</option>` : ""}
+          ${rankOptions
+            .map((r) => `<option value="${escapeHtml(r)}" ${currentRank === r ? "selected" : ""}>${escapeHtml(r)}</option>`)
+            .join("")}
+        </select>
+        <span class="hint">Pick from ${subInfo(activeSlug).short}'s configured ranks (Command Access -> Ranks).${staleCurrentRank ? " This entry's current rank isn't in that list anymore — pick a new one to update it." : ""}</span>`
+      : `<input type="text" id="ca-rs-rank" placeholder="e.g. Deputy Sheriff II" value="${escapeHtml(currentRank)}" />
+        <span class="hint">${subInfo(activeSlug).short} doesn't have Ranks configured yet (Command Access -> Ranks) — free text for now.</span>`;
     formBox.innerHTML = `
       <h4>${editing ? `Edit Badge ${escapeHtml(editing.badgeNumber)}` : "Add a roster entry"}</h4>
       <div class="form-row">
         <label>Rank</label>
-        <input type="text" id="ca-rs-rank" list="ca-rs-rank-options" placeholder="e.g. Deputy Sheriff II" value="${editing ? escapeHtml(editing.rank) : ""}" />
-        <datalist id="ca-rs-rank-options">
-          ${rankOptions.map((r) => `<option value="${escapeHtml(r)}"></option>`).join("")}
-        </datalist>
-        <span class="hint">Type any rank/title — pick one of ${subInfo(activeSlug).short}'s configured ranks from the suggestions, or enter something custom.</span>
+        ${rankFieldHtml}
       </div>
       <div class="form-row">
         <label>Badge Number *</label>

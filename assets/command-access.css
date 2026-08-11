@@ -162,6 +162,36 @@
      color: rgba(255, 255, 255, 0.55);
      margin-top: 0.15rem;
 }
+
+/* Roster drag-to-reorder (replaces the old up/down arrow buttons — see
+   assets/command-access.js setupRosterDragReorder). The row itself is
+   draggable; .ca-roster-row-main just groups the handle + text into one
+   flex item so the row's existing space-between layout (content vs.
+   .ca-actions) is unaffected. */
+.ca-roster-row-main {
+     display: flex;
+     align-items: center;
+     gap: 0.6rem;
+}
+.ca-drag-handle {
+     cursor: grab;
+     font-size: 1.1rem;
+     line-height: 1;
+     color: rgba(255, 255, 255, 0.4);
+     user-select: none;
+     padding: 0.1rem 0.2rem;
+}
+.ca-roster-row {
+     cursor: grab;
+}
+.ca-roster-row.ca-dragging {
+     opacity: 0.4;
+     cursor: grabbing;
+}
+.ca-roster-row.ca-drag-over {
+     border-color: var(--gold, #c9a227);
+     box-shadow: 0 -2px 0 0 var(--gold, #c9a227) inset;
+}
 .ca-option-chip {
      display: inline-block;
      background: rgba(255, 255, 255, 0.08);

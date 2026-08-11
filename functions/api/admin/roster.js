@@ -26,8 +26,15 @@
  *
  * Every write requires a valid Command Access session for that exact
  * subdivision. Requires the D1 database bound as "DB".
+ *
+ * Every successful write also records who made it and when in
+ * content_meta (content_key "roster:<slug>"), which is what powers the
+ * "Last updated ... by ..." line shown on this subdivision's public
+ * Roster page (roster.html?div=slug) and in this panel -- see
+ * functions/api/roster.js and functions/_lib/content-meta.js.
  */
 import { requireSession } from "../../_lib/auth-guard.js";
+import { touchContentMeta, getContentMeta } from "../../_lib/content-meta.js";
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
@@ -61,7 +68,8 @@ export async function onRequestGet(context) {
   )
     .bind(div)
     .all();
-  return jsonResponse({ entries: (results || []).map(parseEntry) }, 200);
+  const lastUpdated = await getContentMeta(env, `roster:${div}`);
+  return jsonResponse({ entries: (results || []).map(parseEntry), lastUpdated }, 200);
 }
 
 export async function onRequestPost(context) {
@@ -96,6 +104,7 @@ export async function onRequestPost(context) {
     )
     .run();
 
+  await touchContentMeta(env, `roster:${body.subdivisionSlug}`, session.username || session.discordId);
   return jsonResponse({ ok: true }, 200);
 }
 
@@ -129,6 +138,7 @@ export async function onRequestPut(context) {
     return jsonResponse({ error: "Roster entry not found." }, 404);
   }
 
+  await touchContentMeta(env, `roster:${body.subdivisionSlug}`, session.username || session.discordId);
   return jsonResponse({ ok: true }, 200);
 }
 
@@ -142,8 +152,11 @@ export async function onRequestDelete(context) {
   const session = await requireSession(request, env, div);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
-  await env.DB.prepare("DELETE FROM roster_entries WHERE id = ? AND subdivision_slug = ?")
+  const deleteResult = await env.DB.prepare("DELETE FROM roster_entries WHERE id = ? AND subdivision_slug = ?")
     .bind(id, div)
     .run();
+  if (deleteResult?.meta?.changes) {
+    await touchContentMeta(env, `roster:${div}`, session.username || session.discordId);
+  }
   return jsonResponse({ ok: true }, 200);
 }

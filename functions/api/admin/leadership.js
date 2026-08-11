@@ -56,6 +56,14 @@ export async function onRequestPut(context) {
   } catch {
     return jsonResponse({ error: "Invalid JSON body." }, 400);
   }
+  // A body of literal JSON `null` (or any non-object) parses without
+  // throwing above, so it has to be checked separately -- without this,
+  // `body.subdivisionSlug` below throws a TypeError on `null`, and since
+  // that happens before requireSession() is called, it was reachable by
+  // anyone, logged in or not.
+  if (!body || typeof body !== "object") {
+    return jsonResponse({ error: "Invalid JSON body." }, 400);
+  }
 
   const slug = (body.subdivisionSlug || "").toString();
   const maxSlots = MAX_SLOTS[slug];

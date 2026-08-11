@@ -144,15 +144,26 @@ export async function onRequestDelete(context) {
   const session = await requireFreshSession(request, env, div);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
-  // Record an audit trail entry *before* deleting, so there's a permanent
-  // record of who deleted what and when even though the submission row
-  // itself is about to be gone. Best-effort: if this insert fails for some
-  // reason, still proceed with the delete (an admin explicitly asked for
-  // it) rather than blocking on the audit log.
+  // Snapshot the row before deleting, purely to have its details for the
+  // audit log entry below -- this SELECT does not gate whether the delete
+  // happens.
   const existing = await env.DB.prepare("SELECT * FROM submissions WHERE id = ? AND subdivision_slug = ?")
     .bind(id, div)
     .first();
-  if (existing) {
+
+  const deleteResult = await env.DB.prepare("DELETE FROM submissions WHERE id = ? AND subdivision_slug = ?")
+    .bind(id, div)
+    .run();
+
+  // Only write an audit entry if this request actually deleted a row --
+  // gating on deleteResult.meta.changes rather than just "the earlier
+  // SELECT found something" closes a race where two near-simultaneous
+  // delete requests for the same submission could both pass the SELECT
+  // before either DELETE ran, which used to produce two audit_log entries
+  // for one real deletion. Best-effort: if this insert fails, that's fine
+  // -- the delete itself (an admin explicitly asked for it) already
+  // succeeded and isn't rolled back for an audit-log write failure.
+  if (existing && deleteResult?.meta?.changes) {
     await env.DB.prepare(
       `INSERT INTO audit_log (actor_discord_id, actor_name, action, subdivision_slug, detail_json)
        VALUES (?, ?, 'delete_submission', ?, ?)`
@@ -173,8 +184,5 @@ export async function onRequestDelete(context) {
       .catch((e) => console.error("Failed to write audit log entry:", e));
   }
 
-  await env.DB.prepare("DELETE FROM submissions WHERE id = ? AND subdivision_slug = ?")
-    .bind(id, div)
-    .run();
   return jsonResponse({ ok: true }, 200);
 }

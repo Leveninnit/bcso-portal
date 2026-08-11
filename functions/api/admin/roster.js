@@ -74,16 +74,17 @@ export async function onRequestPost(context) {
   const session = await requireSession(request, env, body.subdivisionSlug);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
-  const { results } = await env.DB.prepare(
-    "SELECT COALESCE(MAX(sort_order), -1) AS maxOrder FROM roster_entries WHERE subdivision_slug = ?"
-  )
-    .bind(body.subdivisionSlug)
-    .all();
-  const nextOrder = (results && results[0] && Number(results[0].maxOrder)) || 0;
-
+  // The next sort_order is computed by a subquery inside this same INSERT
+  // statement, rather than a separate SELECT beforehand -- SQLite/D1
+  // serializes writes, so folding the read into the write makes the
+  // "read current max, then insert one past it" sequence atomic. Two "add
+  // roster entry" requests for the same subdivision arriving within
+  // milliseconds of each other used to be able to both read the same
+  // MAX(sort_order) from a standalone SELECT and then both insert with
+  // the same computed value, silently tying two entries on order.
   await env.DB.prepare(
     `INSERT INTO roster_entries (subdivision_slug, rank, badge_number, callsign, notes, sort_order)
-     VALUES (?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM roster_entries WHERE subdivision_slug = ?))`
   )
     .bind(
       body.subdivisionSlug,
@@ -91,7 +92,7 @@ export async function onRequestPost(context) {
       body.badgeNumber.trim().slice(0, 30),
       (body.callsign || "").toString().trim().slice(0, 30),
       (body.notes || "").toString().trim().slice(0, 300),
-      nextOrder + 1
+      body.subdivisionSlug
     )
     .run();
 

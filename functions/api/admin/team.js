@@ -76,6 +76,11 @@ export async function onRequestPut(context) {
   } catch {
     return jsonResponse({ error: "Invalid JSON body." }, 400);
   }
+  // A body of literal JSON `null` parses without throwing above -- guard
+  // against it (and any other non-object) before touching its fields.
+  if (!body || typeof body !== "object") {
+    return jsonResponse({ error: "Invalid JSON body." }, 400);
+  }
 
   const slot = Number(body.slotNumber);
   if (!Number.isInteger(slot) || slot < 1 || slot > MAX_SLOTS) {

@@ -102,6 +102,11 @@ export async function onRequestPut(context) {
   } catch {
     return jsonResponse({ error: "Invalid JSON body." }, 400);
   }
+  // A body of literal JSON `null` parses without throwing above -- guard
+  // against it (and any other non-object) before touching its fields.
+  if (!body || typeof body !== "object") {
+    return jsonResponse({ error: "Invalid JSON body." }, 400);
+  }
 
   const rows = [
     ["deputy_of_week", cleanDeputy(body.deputyOfWeek)],

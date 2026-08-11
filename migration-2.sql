@@ -1,5 +1,15 @@
 -- BCSO Portal — Migration 2 (Cloudflare D1 / SQLite)
 --
+-- SKIP THIS FILE if you're setting up a brand-new database: schema.sql
+-- was updated to already include everything below (rank_options,
+-- movement_templates.subdivision_slug, submissions.discord_message_id /
+-- discord_channel_id, subdivision_leadership, site_content). Just run
+-- schema.sql and you're done.
+--
+-- This file is only for a database that was already set up using the
+-- OLD (smaller) version of schema.sql, before that consolidation, and
+-- hasn't run this migration yet.
+--
 -- Adds the schema needed for: per-subdivision Rank dropdowns on activity
 -- logs, subdivision-scoped Deputy Movement templates, the Discord
 -- approve/reject sync (website <-> Discord embed buttons), the
@@ -11,6 +21,17 @@
 -- your database -> Console, paste this whole file and execute). It only
 -- adds new tables/columns — nothing here touches or deletes existing
 -- data.
+--
+-- NOT SAFE TO RE-RUN: unlike the rest of this file (CREATE TABLE IF NOT
+-- EXISTS / INSERT OR IGNORE, both naturally idempotent), the three ALTER
+-- TABLE ... ADD COLUMN statements below are NOT idempotent — plain SQLite
+-- has no "ADD COLUMN IF NOT EXISTS", so running this a second time will
+-- fail those three lines with a "duplicate column name" error. If you're
+-- not sure whether you already ran this, check first:
+--   SELECT sql FROM sqlite_master WHERE type='table' AND name='submissions';
+-- If discord_message_id/discord_channel_id already show up in that
+-- output, delete the three ALTER TABLE lines below before running the
+-- rest of this file (or just skip this file entirely).
 
 -- Per-subdivision Rank options for the Activity Log form. If a
 -- subdivision has no rows here, log.html keeps the original free-text

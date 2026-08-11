@@ -89,7 +89,13 @@ const grid = document.getElementById("doc-grid");
 grid.innerHTML = "Loading…";
 try {
 const res = await fetch(`/api/documents?div=${encodeURIComponent(sub.slug)}`, { cache: "no-store" });
-const data = await res.json().catch(() => ({}));
+// A failed request used to fall through to the same `data.documents ||
+// []` fallback as "this subdivision genuinely has zero documents",
+// showing a misleading "No documents have been added yet" instead of a
+// real error.
+if (!res.ok) throw new Error(`Request failed (${res.status})`);
+const data = await res.json().catch(() => null);
+if (!data) throw new Error("Invalid response body");
 const docs = data.documents || [];
 if (!docs.length) {
 grid.innerHTML = `<p style="color: var(--muted);">No documents have been added for ${escapeHtml(sub.name)} yet.</p>`;
@@ -116,7 +122,7 @@ return `
 <div class="panel sub-card">
 <h3>${escapeHtml(d.name)}</h3>
 <p>${escapeHtml(d.description)}</p>
-<a class="btn btn-gold" href="${d.url}" target="_blank" rel="noopener">Open Document</a>
+<a class="btn btn-gold" href="${escapeHtml(d.url)}" target="_blank" rel="noopener">Open Document</a>
 </div>
 `;
 }).join("");

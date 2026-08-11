@@ -1,5 +1,10 @@
 -- BCSO Portal — Migration 4 (Cloudflare D1 / SQLite)
 --
+-- SKIP THIS FILE if you're setting up a brand-new database: schema.sql
+-- was updated to already include the roster_entries table below. Just
+-- run schema.sql and you're done. This file is only for a database set
+-- up before that consolidation that hasn't run this migration yet.
+--
 -- Adds the "Roster" feature: every subdivision (including SRT) gets its
 -- own roster of members, managed from Command Access and shown on that
 -- subdivision's Documents page (documents.html?div=slug). Each entry is

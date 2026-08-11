@@ -21,6 +21,7 @@ Official department documents, kept up to date in Google Docs.
 Each link opens the live document in a new tab so you always
 see the current version.
 </p>
+<p class="page-sub" id="doc-sop-link" style="display:none;"></p>
 <div id="doc-grid" class="sub-grid">
 <!-- populated by JS from assets/documents.js -->
 </div>
@@ -85,6 +86,9 @@ document.title = sub.name + " Documents — BCSO";
 document.getElementById("doc-subtitle").textContent =
 "Documents specific to the " + sub.name + ", kept up to date by its own command staff.";
 document.getElementById("sub-doc-section").style.display = "none";
+const sopLinkEl = document.getElementById("doc-sop-link");
+sopLinkEl.innerHTML = `<a href="subdivision-sop.html?div=${encodeURIComponent(sub.slug)}" class="btn btn-outline">View ${escapeHtml(sub.short)} SOP →</a>`;
+sopLinkEl.style.display = "";
 const grid = document.getElementById("doc-grid");
 grid.innerHTML = "Loading…";
 try {

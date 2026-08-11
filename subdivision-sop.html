@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SOP — BCSO</title>
+  <meta name="description" content="Subdivision Standard Operating Procedure — kept up to date by that subdivision's own command staff." />
+  <link rel="icon" type="image/png" href="assets/bcso-crest.png" />
+  <link rel="apple-touch-icon" href="assets/bcso-crest.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+  <div id="site-header-mount"></div>
+  <main>
+    <section>
+      <div class="container legal-page">
+        <div class="breadcrumb" id="sop-breadcrumb"><a href="index.html">Home</a> / SOP</div>
+        <h1 class="page-title" id="sop-title">SOP</h1>
+        <p class="page-sub" id="sop-subtitle">Kept up to date by this subdivision's own command staff.</p>
+
+        <div class="panel legal-panel" id="sop-body">Loading…</div>
+      </div>
+    </section>
+  </main>
+  <div id="site-footer-mount"></div>
+  <script src="assets/subdivisions.js"></script>
+  <script src="assets/main.js"></script>
+  <script src="assets/effects.js"></script>
+  <script>
+    function getQueryParam(name) {
+      return new URLSearchParams(window.location.search).get(name);
+    }
+    function findSubdivision(slug) {
+      return (window.SUBDIVISIONS || []).find((s) => s.slug === slug);
+    }
+    function escapeHtml(str) {
+      return (str ?? "").toString().replace(/[&<>"']/g, (c) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;",
+      }[c]));
+    }
+    // Same "D1's datetime('now') is UTC without a 'Z'" handling as
+    // assets/leaderboards.js's formatDate.
+    function formatDate(value) {
+      if (!value) return "";
+      const iso = value.includes("T") ? value : value.replace(" ", "T") + "Z";
+      const d = new Date(iso);
+      if (isNaN(d.getTime())) return value;
+      return d.toLocaleString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      });
+    }
+    // Same plain-text-to-paragraphs rendering as sop.html (the
+    // department-wide SOP page) -- no markup is interpreted, a blank
+    // line starts a new paragraph, a single line break becomes <br>.
+    function renderSopText(text) {
+      const paragraphs = text.split(/\n{2,}/).map((p) => p.trim()).filter(Boolean);
+      if (!paragraphs.length) return "";
+      return paragraphs.map((p) => `<p>${escapeHtml(p).replace(/\n/g, "<br>")}</p>`).join("");
+    }
+    async function loadSop(sub) {
+      const body = document.getElementById("sop-body");
+      const subtitle = document.getElementById("sop-subtitle");
+      try {
+        const res = await fetch(`/api/subdivision-sop?div=${encodeURIComponent(sub.slug)}`, { cache: "no-store" });
+        const data = await res.json().catch(() => ({}));
+        const text = (data && data.text) || "";
+        subtitle.textContent =
+          data && data.lastUpdated && data.lastUpdated.at
+            ? `Last updated ${formatDate(data.lastUpdated.at)} by ${data.lastUpdated.by}.`
+            : "Kept up to date by this subdivision's own command staff.";
+        if (!text.trim()) {
+          body.innerHTML = `<p>${escapeHtml(sub.short)} hasn't added an SOP to the site yet — check back soon, or ask ${escapeHtml(sub.short)} command staff on Discord.</p>`;
+          return;
+        }
+        body.innerHTML = renderSopText(text);
+      } catch {
+        body.innerHTML = `<p>Couldn't load the SOP. Try refreshing.</p>`;
+      }
+    }
+    function renderPage(sub) {
+      document.getElementById("sop-breadcrumb").innerHTML =
+        `<a href="index.html">Home</a> / <a href="documents.html?div=${encodeURIComponent(sub.slug)}">${escapeHtml(sub.name)} Documents</a> / SOP`;
+      document.getElementById("sop-title").textContent = sub.short + " SOP";
+      document.title = sub.short + " SOP — BCSO";
+      loadSop(sub);
+    }
+    function renderMissingSubdivision() {
+      document.getElementById("sop-title").textContent = "SOP";
+      document.getElementById("sop-subtitle").innerHTML =
+        `Pick a subdivision from <a href="documents.html">Master Documents</a> to view its SOP.`;
+      document.getElementById("sop-body").innerHTML = "";
+    }
+    document.addEventListener("DOMContentLoaded", () => {
+      const slug = getQueryParam("div");
+      const sub = slug ? findSubdivision(slug) : null;
+      if (sub) {
+        renderPage(sub);
+      } else {
+        renderMissingSubdivision();
+      }
+    });
+  </script>
+</body>
+</html>

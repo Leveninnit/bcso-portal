@@ -107,7 +107,7 @@
                     <option value="Open Recruitment">Open Recruitment</option>
                   </select>
                 </div>
-                <div class="two-col">
+                <div class="two-col" id="rtd-assist-fto">
                   <div class="form-row">
                     <label for="ftoBadge">FTO Badge Number *</label>
                     <input type="text" id="ftoBadge" name="ftoBadge" placeholder="e.g. 03221" />
@@ -116,6 +116,23 @@
                     <label for="ftoDiscordId">FTO Discord ID *</label>
                     <input type="text" id="ftoDiscordId" name="ftoDiscordId" placeholder="e.g. 1002934806990041188" />
                   </div>
+                </div>
+                <!-- Shown instead of the FTO fields above when "Open
+                     Recruitment" is picked — a recruit doesn't have a
+                     badge number yet, and a single session can net more
+                     than one person, so this is just a repeatable Discord
+                     ID field (see assets/log.js setupRecruitLists). -->
+                <div id="rtd-assist-recruits" style="display:none;">
+                  <p class="hint">Add the Discord ID of everyone you recruited. Add more if there was more than one.</p>
+                  <div id="assist-recruit-list">
+                    <div class="rtd-recruit-row">
+                      <div class="form-row">
+                        <label for="assistRecruitDiscord1">Recruited Person's Discord ID</label>
+                        <input type="text" id="assistRecruitDiscord1" class="rtd-recruit-input" data-recruit-group="assist" placeholder="e.g. 372504974311632896" />
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" class="rtd-add-recruit" id="assist-add-recruit">+ Add another recruit</button>
                 </div>
               </div>
 
@@ -130,6 +147,7 @@
                     <option value="Open Recruitment">Open Recruitment</option>
                   </select>
                 </div>
+                <div id="rtd-host-training">
                 <p class="hint">Cadet #1 is required. Cadets #2–#4 are optional — leave them blank if not present.</p>
                 <div id="cadet-1">
                   <div class="two-col">
@@ -236,6 +254,22 @@
                     </div>
                   </div>
                 </div>
+                </div>
+                <!-- Shown instead of the Cadet fields above when "Open
+                     Recruitment" is picked — see the matching comment on
+                     #rtd-assist-recruits above. -->
+                <div id="rtd-host-recruits" style="display:none;">
+                  <p class="hint">Add the Discord ID of everyone you recruited. Add more if there was more than one.</p>
+                  <div id="host-recruit-list">
+                    <div class="rtd-recruit-row">
+                      <div class="form-row">
+                        <label for="hostRecruitDiscord1">Recruited Person's Discord ID</label>
+                        <input type="text" id="hostRecruitDiscord1" class="rtd-recruit-input" data-recruit-group="host" placeholder="e.g. 372504974311632896" />
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" class="rtd-add-recruit" id="host-add-recruit">+ Add another recruit</button>
+                </div>
               </div>
 
               <div id="rtd-supervise" style="display:none;">
@@ -249,7 +283,7 @@
                     <option value="Open Recruitment">Open Recruitment</option>
                   </select>
                 </div>
-                <div class="two-col">
+                <div class="two-col" id="rtd-supervise-person">
                   <div class="form-row">
                     <label for="supervisedBadge">Supervised Person's Badge Number *</label>
                     <input type="text" id="supervisedBadge" name="supervisedBadge" placeholder="e.g. 1042" />
@@ -258,6 +292,21 @@
                     <label for="supervisedDiscordId">Supervised Person's Discord ID *</label>
                     <input type="text" id="supervisedDiscordId" name="supervisedDiscordId" placeholder="e.g. 372504974311632896" />
                   </div>
+                </div>
+                <!-- Shown instead of the Supervised Person fields above
+                     when "Open Recruitment" is picked — see the matching
+                     comment on #rtd-assist-recruits above. -->
+                <div id="rtd-supervise-recruits" style="display:none;">
+                  <p class="hint">Add the Discord ID of everyone you recruited. Add more if there was more than one.</p>
+                  <div id="supervise-recruit-list">
+                    <div class="rtd-recruit-row">
+                      <div class="form-row">
+                        <label for="superviseRecruitDiscord1">Recruited Person's Discord ID</label>
+                        <input type="text" id="superviseRecruitDiscord1" class="rtd-recruit-input" data-recruit-group="supervise" placeholder="e.g. 372504974311632896" />
+                      </div>
+                    </div>
+                  </div>
+                  <button type="button" class="rtd-add-recruit" id="supervise-add-recruit">+ Add another recruit</button>
                 </div>
               </div>
             </div>

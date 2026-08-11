@@ -1,5 +1,5 @@
 import { verifySession, parseCookies } from "./session.js";
-import { getGuildMemberRoles, computePermissions } from "./discord.js";
+import { getGuildMemberRoles, computePermissions, HIGH_COMMAND_ROLE_ID } from "./discord.js";
 
 /**
  * Verifies the request's session cookie and, if a subdivision slug is
@@ -38,5 +38,12 @@ export async function requireFreshSession(request, env, subdivisionSlug) {
   const perms = computePermissions(liveRoles);
   if (!perms.hasCommandLogin) return null;
   if (subdivisionSlug && !perms.subdivisions.includes(subdivisionSlug)) return null;
-  return { ...session, subdivisions: perms.subdivisions, isHighCommand: session.isHighCommand };
+  // Re-derive isHighCommand from the same live role list too, not just
+  // hasCommandLogin/subdivisions -- otherwise this "fresh" check would
+  // still trust a High Command flag baked into the session cookie up to
+  // SESSION_HOURS ago, which would defeat the point of this function the
+  // moment any future high-command-gated destructive action starts
+  // calling it.
+  const isHighCommand = liveRoles.includes(HIGH_COMMAND_ROLE_ID);
+  return { ...session, subdivisions: perms.subdivisions, isHighCommand };
 }

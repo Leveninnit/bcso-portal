@@ -208,7 +208,13 @@ export function resolveWebhookUrl(env, formType, subdivisionSlug) {
 // channel id it already knew from the last submission. Falls back to a
 // live lookup on a cold isolate or a cache miss, exactly as before.
 const webhookChannelIdCache = new Map();
-const WEBHOOK_CHANNEL_CACHE_TTL_MS = 30 * 60 * 1000; // 30 minutes
+// 10 minutes. Kept short (rather than e.g. 30) because moving an existing
+// webhook to a different Discord channel doesn't change its id/token --
+// Discord's UI allows this -- so a stale cache entry here doesn't fail
+// loudly, it just means postBotMessage keeps succeeding against the OLD
+// channel for as long as this TTL lasts, with nothing surfaced anywhere
+// that logs/applications are going to a channel nobody's watching.
+const WEBHOOK_CHANNEL_CACHE_TTL_MS = 10 * 60 * 1000;
 
 export async function resolveWebhookChannelId(webhookUrl) {
   const parsed = parseWebhookUrl(webhookUrl);

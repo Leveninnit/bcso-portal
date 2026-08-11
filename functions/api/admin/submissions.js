@@ -14,7 +14,7 @@
  * Requires the D1 database bound as "DB".
  */
 import { requireSession } from "../../_lib/auth-guard.js";
-import { resolveWebhookUrl, editWebhookMessage } from "../../_lib/discord.js";
+import { editBotMessage } from "../../_lib/discord.js";
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
@@ -83,7 +83,7 @@ export async function onRequestPatch(context) {
   // decision is made the other way, via the Discord Approve/Reject
   // buttons — see functions/api/discord/interactions.js).
   const row = await env.DB.prepare(
-    "SELECT form_type, discord_message_id FROM submissions WHERE id = ? AND subdivision_slug = ?"
+    "SELECT form_type, discord_message_id, discord_channel_id FROM submissions WHERE id = ? AND subdivision_slug = ?"
   )
     .bind(body.id, body.subdivisionSlug)
     .first();
@@ -96,17 +96,14 @@ export async function onRequestPatch(context) {
     .bind(body.status, decidedByName, body.id, body.subdivisionSlug)
     .run();
 
-  if (row && row.discord_message_id) {
-    const webhookUrl = resolveWebhookUrl(env, row.form_type, body.subdivisionSlug);
-    if (webhookUrl) {
-      const verb = body.status === "accepted" ? "✅ **Approved**" : "❌ **Rejected**";
-      context.waitUntil(
-        editWebhookMessage(webhookUrl, row.discord_message_id, {
-          content: `${verb} by **${decidedByName}** on the Command Access dashboard.`,
-          components: [],
-        })
-      );
-    }
+  if (row && row.discord_message_id && row.discord_channel_id) {
+    const verb = body.status === "accepted" ? "✅ **Approved**" : "❌ **Rejected**";
+    context.waitUntil(
+      editBotMessage(env, row.discord_channel_id, row.discord_message_id, {
+        content: `${verb} by **${decidedByName}** on the Command Access dashboard.`,
+        components: [],
+      })
+    );
   }
 
   return jsonResponse({ ok: true }, 200);

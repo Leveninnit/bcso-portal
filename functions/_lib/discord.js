@@ -179,22 +179,60 @@ export function resolveWebhookUrl(env, formType, subdivisionSlug) {
 }
 
 /**
- * Posts to a Discord webhook and asks Discord to hand back the message it
- * created (?wait=true), so the caller can store its id/channel_id and
- * later edit it (see editWebhookMessage) once a decision is made. Never
- * throws — returns { ok: false } on any failure so a message-tracking
- * problem never blocks the underlying application/log submission.
+ * Looks up which channel a configured webhook URL points at, by asking
+ * Discord for the webhook's own metadata (a plain GET, no auth needed --
+ * the id+token in the URL are all it requires). Used only to figure out
+ * *where* to post (see postBotMessage below) -- this repo keeps webhook
+ * URLs as the one piece of per-subdivision config in Cloudflare env vars,
+ * so this avoids needing a whole second set of channel-id env vars just
+ * to switch from webhook-posting to bot-posting. Returns null on any
+ * failure so a lookup problem never blocks the underlying submission
+ * (the caller treats a null channelId as "couldn't post").
  */
-export async function postToWebhookWithId(webhookUrl, payload) {
+export async function resolveWebhookChannelId(webhookUrl) {
+  const parsed = parseWebhookUrl(webhookUrl);
+  if (!parsed) return null;
   try {
-    // with_components=true: this repo's webhooks are plain channel
-    // Incoming Webhooks, not "application-owned" ones -- Discord silently
-    // drops any `components` (buttons) in the payload unless this query
-    // param is set, with no error at all. See editWebhookMessage below for
-    // where this actually bites (that's where buttons get attached).
-    const res = await fetch(`${webhookUrl}?wait=true&with_components=true`, {
+    const res = await fetch(`https://discord.com/api/webhooks/${parsed.id}/${parsed.token}`);
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    return data?.channel_id || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Posts a message to a channel using the BOT's own identity (not a
+ * webhook). This is required for the Approve/Reject buttons to actually
+ * work: per Discord's own docs, "Interactions only work with an
+ * application-owned webhook" -- this repo's DISCORD_WEBHOOK_* URLs are
+ * plain channel Incoming Webhooks (created by hand in a channel's
+ * Integrations settings), which are NOT application-owned, so any
+ * interactive component attached to a message posted *through* them can
+ * never route a click anywhere -- Discord has no application to hand the
+ * interaction to. Posting via the bot sidesteps this entirely, since the
+ * message is then owned by this bot's application by construction.
+ *
+ * Trade-off: unlike a webhook, a bot-sent message can't override its
+ * displayed username/avatar per-call, so these no longer show as "BCSO
+ * Activity Logs" / "BCSO Applications" with the department crest -- they
+ * show as this bot's own account. The embed's `author` field is used to
+ * recreate that branding inside the message itself (see log.js/apply.js).
+ *
+ * Never throws -- returns { ok: false } on any failure so a
+ * message-tracking problem never blocks the underlying submission.
+ */
+export async function postBotMessage(env, channelId, payload) {
+  if (!channelId) return { ok: false, error: "No channel id (webhook lookup failed)." };
+  if (!env.DISCORD_BOT_TOKEN) return { ok: false, error: "DISCORD_BOT_TOKEN is not configured." };
+  try {
+    const res = await fetch(`https://discord.com/api/channels/${channelId}/messages`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
@@ -205,7 +243,7 @@ export async function postToWebhookWithId(webhookUrl, payload) {
       ok: true,
       status: res.status,
       messageId: message?.id || null,
-      channelId: message?.channel_id || null,
+      channelId,
     };
   } catch (err) {
     return { ok: false, error: String(err) };
@@ -219,27 +257,27 @@ function parseWebhookUrl(webhookUrl) {
 }
 
 /**
- * Edits a message a webhook previously posted — used to update a
- * submission's embed to show "Decision: Accepted by X" (or Rejected) and
- * drop the Approve/Reject buttons once someone acts on it, whether that
- * action happened on the website or on Discord. Best-effort: a failure
- * here (message deleted, webhook removed, etc.) is logged and swallowed,
- * never thrown back into the caller.
+ * Edits a message the BOT previously sent (see postBotMessage above) --
+ * used to attach the Approve/Reject buttons once the submission id is
+ * known, and later to update the embed to show "Decision: Accepted by X"
+ * (or Rejected) and drop the buttons once someone acts on it, whether
+ * that action happened on the website or on Discord. Needs both the
+ * channel id and message id (unlike a webhook edit, which only needs the
+ * message id) since the Channel Messages API is keyed by channel.
+ * Best-effort: a failure here (message deleted, missing permissions,
+ * etc.) is logged and swallowed, never thrown back into the caller.
  */
-export async function editWebhookMessage(webhookUrl, messageId, body) {
-  const parsed = parseWebhookUrl(webhookUrl);
-  if (!parsed || !messageId) return;
+export async function editBotMessage(env, channelId, messageId, body) {
+  if (!channelId || !messageId || !env.DISCORD_BOT_TOKEN) return;
   try {
-    // with_components=true is required here for the same reason as in
-    // postToWebhookWithId above -- without it, Discord accepts this PATCH,
-    // returns 200, and just quietly ignores `components`. That silent
-    // failure is exactly why the Approve/Reject buttons never showed up:
-    // this edit "succeeded" every time but never actually attached them.
     const res = await fetch(
-      `https://discord.com/api/webhooks/${parsed.id}/${parsed.token}/messages/${messageId}?with_components=true`,
+      `https://discord.com/api/channels/${channelId}/messages/${messageId}`,
       {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify(body),
       }
     );

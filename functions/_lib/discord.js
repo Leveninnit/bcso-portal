@@ -187,7 +187,12 @@ export function resolveWebhookUrl(env, formType, subdivisionSlug) {
  */
 export async function postToWebhookWithId(webhookUrl, payload) {
   try {
-    const res = await fetch(`${webhookUrl}?wait=true`, {
+    // with_components=true: this repo's webhooks are plain channel
+    // Incoming Webhooks, not "application-owned" ones -- Discord silently
+    // drops any `components` (buttons) in the payload unless this query
+    // param is set, with no error at all. See editWebhookMessage below for
+    // where this actually bites (that's where buttons get attached).
+    const res = await fetch(`${webhookUrl}?wait=true&with_components=true`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
@@ -225,8 +230,13 @@ export async function editWebhookMessage(webhookUrl, messageId, body) {
   const parsed = parseWebhookUrl(webhookUrl);
   if (!parsed || !messageId) return;
   try {
+    // with_components=true is required here for the same reason as in
+    // postToWebhookWithId above -- without it, Discord accepts this PATCH,
+    // returns 200, and just quietly ignores `components`. That silent
+    // failure is exactly why the Approve/Reject buttons never showed up:
+    // this edit "succeeded" every time but never actually attached them.
     const res = await fetch(
-      `https://discord.com/api/webhooks/${parsed.id}/${parsed.token}/messages/${messageId}`,
+      `https://discord.com/api/webhooks/${parsed.id}/${parsed.token}/messages/${messageId}?with_components=true`,
       {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },

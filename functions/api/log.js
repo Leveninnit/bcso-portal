@@ -14,6 +14,14 @@
  * Google Form writes to — so portal submissions show up in the roster's
  * hour/contribution totals exactly like a Form submission would.
  *
+ * RTD's Assist/Host/Supervise branches each swap their normal
+ * FTO/Cadet/Supervised-person fields for a simple recruited-person
+ * Discord ID list (one or more) when their Type dropdown is "Open
+ * Recruitment" — see cleanRtd's *Recruits arrays below. NOTE: those
+ * arrays are new; the Apps Script (Code.gs, not part of this repo) may
+ * need a small update on the Google side to actually place recruited
+ * people into the sheet — this endpoint just forwards the data.
+ *
  * Duration is collected as separate hours/minutes/seconds fields (not a
  * single decimal-hours number) so shifts can be logged down to the
  * second. Internally this is still also expressed as decimal hours
@@ -99,11 +107,20 @@ function cleanRtd(rtd) {
   const r = rtd && typeof rtd === "object" ? rtd : {};
   const c = (v) => clean(v, 60);
   const cadets = Array.isArray(r.cadets) ? r.cadets : [];
+  // "Open Recruitment" swaps the FTO/Cadet/Supervised-person fields for a
+  // simple list of recruited people's Discord IDs — capped well above any
+  // real single-session recruitment count as an anti-abuse backstop.
+  const cleanRecruits = (arr) =>
+    (Array.isArray(arr) ? arr : [])
+      .map((v) => clean(v, 100))
+      .filter(Boolean)
+      .slice(0, 25);
   return {
     role: c(r.role), // "assist" | "host" | "supervise"
     assistType: c(r.assistType),
     ftoBadge: c(r.ftoBadge),
     ftoDiscordId: c(r.ftoDiscordId),
+    assistRecruits: cleanRecruits(r.assistRecruits),
     hostType: c(r.hostType),
     cadets: [0, 1, 2, 3].map((i) => ({
       badge: c(cadets[i] && cadets[i].badge),
@@ -111,9 +128,11 @@ function cleanRtd(rtd) {
       result: c(cadets[i] && cadets[i].result),
       notes: clean(cadets[i] && cadets[i].notes, 500),
     })),
+    hostRecruits: cleanRecruits(r.hostRecruits),
     superviseType: c(r.superviseType),
     supervisedBadge: c(r.supervisedBadge),
     supervisedDiscordId: c(r.supervisedDiscordId),
+    superviseRecruits: cleanRecruits(r.superviseRecruits),
   };
 }
 
@@ -143,12 +162,20 @@ async function forwardToSheet(env, { badgeNumber, discordId, rank, hoursOnDuty, 
       assistDuration: isAssist ? hms : "",
       ftoBadge: isAssist ? rtd.ftoBadge : "",
       ftoDiscordId: isAssist ? rtd.ftoDiscordId : "",
+      // "Open Recruitment" fills *Recruits instead of the fields above —
+      // an array of the recruited people's Discord IDs. NOTE: the Apps
+      // Script this webhook posts to (Code.gs, outside this repo) may
+      // need a small update to actually place these into the sheet; this
+      // is a new field the original Google Form/script never sent.
+      assistRecruits: isAssist ? rtd.assistRecruits : [],
       hostType: isHost ? rtd.hostType : "",
       hostDuration: isHost ? hms : "",
       cadets: isHost ? rtd.cadets : [],
+      hostRecruits: isHost ? rtd.hostRecruits : [],
       superviseType: isSupervise ? rtd.superviseType : "",
       supervisedBadge: isSupervise ? rtd.supervisedBadge : "",
       supervisedDiscordId: isSupervise ? rtd.supervisedDiscordId : "",
+      superviseRecruits: isSupervise ? rtd.superviseRecruits : [],
     };
 
     const res = await fetch(env.SHEET_LOG_WEBHOOK_URL, {
@@ -338,20 +365,44 @@ export async function onRequestPost(context) {
     if (!["assist", "host", "supervise"].includes(rtd.role)) {
       return jsonResponse({ error: "Please select your role during this activation." }, 400);
     }
-    if (rtd.role === "assist" && (!rtd.assistType || !rtd.ftoBadge || !rtd.ftoDiscordId)) {
-      return jsonResponse({ error: "Please fill in all Assist fields (activity type, FTO badge, FTO Discord ID)." }, 400);
+    if (rtd.role === "assist") {
+      if (!rtd.assistType) {
+        return jsonResponse({ error: "Please select what you assisted with." }, 400);
+      }
+      if (rtd.assistType === "Open Recruitment") {
+        if (!rtd.assistRecruits.length) {
+          return jsonResponse({ error: "Please add at least one recruited person's Discord ID." }, 400);
+        }
+      } else if (!rtd.ftoBadge || !rtd.ftoDiscordId) {
+        return jsonResponse({ error: "Please fill in your FTO's badge number and Discord ID." }, 400);
+      }
     }
     if (rtd.role === "host") {
       if (!rtd.hostType) {
         return jsonResponse({ error: "Please select what you hosted." }, 400);
       }
-      const c1 = rtd.cadets[0];
-      if (!c1.badge || !c1.discordId || !c1.result) {
-        return jsonResponse({ error: "Cadet #1's badge number, Discord ID, and Pass/Fail are required." }, 400);
+      if (rtd.hostType === "Open Recruitment") {
+        if (!rtd.hostRecruits.length) {
+          return jsonResponse({ error: "Please add at least one recruited person's Discord ID." }, 400);
+        }
+      } else {
+        const c1 = rtd.cadets[0];
+        if (!c1.badge || !c1.discordId || !c1.result) {
+          return jsonResponse({ error: "Cadet #1's badge number, Discord ID, and Pass/Fail are required." }, 400);
+        }
       }
     }
-    if (rtd.role === "supervise" && (!rtd.superviseType || !rtd.supervisedBadge || !rtd.supervisedDiscordId)) {
-      return jsonResponse({ error: "Please fill in all Supervise fields." }, 400);
+    if (rtd.role === "supervise") {
+      if (!rtd.superviseType) {
+        return jsonResponse({ error: "Please select what you supervised." }, 400);
+      }
+      if (rtd.superviseType === "Open Recruitment") {
+        if (!rtd.superviseRecruits.length) {
+          return jsonResponse({ error: "Please add at least one recruited person's Discord ID." }, 400);
+        }
+      } else if (!rtd.supervisedBadge || !rtd.supervisedDiscordId) {
+        return jsonResponse({ error: "Please fill in the supervised person's badge number and Discord ID." }, 400);
+      }
     }
   }
 
@@ -380,29 +431,41 @@ export async function onRequestPost(context) {
     if (rtd.role === "assist") {
       fields.push(
         { name: "Role", value: "Assist", inline: true },
-        { name: "Assisted With", value: rtd.assistType, inline: true },
-        { name: "FTO", value: `${rtd.ftoBadge} (${rtd.ftoDiscordId})`, inline: true }
+        { name: "Assisted With", value: rtd.assistType, inline: true }
       );
+      if (rtd.assistType === "Open Recruitment" && rtd.assistRecruits.length) {
+        fields.push({ name: "Recruited", value: rtd.assistRecruits.join("\n"), inline: false });
+      } else {
+        fields.push({ name: "FTO", value: `${rtd.ftoBadge} (${rtd.ftoDiscordId})`, inline: true });
+      }
     } else if (rtd.role === "host") {
       fields.push(
         { name: "Role", value: "Host", inline: true },
         { name: "Hosted", value: rtd.hostType, inline: true }
       );
-      rtd.cadets
-        .filter((c) => c.badge || c.discordId)
-        .forEach((c, i) => {
-          fields.push({
-            name: `Cadet #${i + 1}`,
-            value: `${c.badge} (${c.discordId}) — ${c.result}${c.notes ? " — " + c.notes : ""}`,
-            inline: false,
+      if (rtd.hostType === "Open Recruitment" && rtd.hostRecruits.length) {
+        fields.push({ name: "Recruited", value: rtd.hostRecruits.join("\n"), inline: false });
+      } else {
+        rtd.cadets
+          .filter((c) => c.badge || c.discordId)
+          .forEach((c, i) => {
+            fields.push({
+              name: `Cadet #${i + 1}`,
+              value: `${c.badge} (${c.discordId}) — ${c.result}${c.notes ? " — " + c.notes : ""}`,
+              inline: false,
+            });
           });
-        });
+      }
     } else if (rtd.role === "supervise") {
       fields.push(
         { name: "Role", value: "Supervise", inline: true },
-        { name: "Supervised", value: rtd.superviseType, inline: true },
-        { name: "Supervised Person", value: `${rtd.supervisedBadge} (${rtd.supervisedDiscordId})`, inline: true }
+        { name: "Supervised", value: rtd.superviseType, inline: true }
       );
+      if (rtd.superviseType === "Open Recruitment" && rtd.superviseRecruits.length) {
+        fields.push({ name: "Recruited", value: rtd.superviseRecruits.join("\n"), inline: false });
+      } else {
+        fields.push({ name: "Supervised Person", value: `${rtd.supervisedBadge} (${rtd.supervisedDiscordId})`, inline: true });
+      }
     }
   }
   fields.push({ name: "Shift Summary", value: summary, inline: false });

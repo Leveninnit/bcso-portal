@@ -141,9 +141,14 @@
   // person, so members can add as many rows as they need.
   // ------------------------------------------------------------------
   const RECRUIT_GROUPS = {
-    assist: { key: "assist", typeId: "assistType", trainingId: "rtd-assist-fto", recruitsId: "rtd-assist-recruits", listId: "assist-recruit-list", addBtnId: "assist-add-recruit", prefix: "assistRecruitDiscord" },
-    host: { key: "host", typeId: "hostType", trainingId: "rtd-host-training", recruitsId: "rtd-host-recruits", listId: "host-recruit-list", addBtnId: "host-add-recruit", prefix: "hostRecruitDiscord" },
-    supervise: { key: "supervise", typeId: "superviseType", trainingId: "rtd-supervise-person", recruitsId: "rtd-supervise-recruits", listId: "supervise-recruit-list", addBtnId: "supervise-add-recruit", prefix: "superviseRecruitDiscord" },
+    assist: { key: "assist", typeId: "assistType", trainingId: "rtd-assist-fto", recruitsId: "rtd-assist-recruits", listId: "assist-recruit-list", addBtnId: "assist-add-recruit", prefix: "assistRecruitDiscord", recruitValues: ["Open Recruitment"] },
+    // Host also has "Discord Recruitment" — a recruitment that happened
+    // entirely over Discord rather than in-game, so it gets the same
+    // recruited-person Discord ID list as Open Recruitment (see
+    // syncNoShiftFields below for the other thing that makes it distinct:
+    // no Duration on Duty / Shift Summary, since there's no shift).
+    host: { key: "host", typeId: "hostType", trainingId: "rtd-host-training", recruitsId: "rtd-host-recruits", listId: "host-recruit-list", addBtnId: "host-add-recruit", prefix: "hostRecruitDiscord", recruitValues: ["Open Recruitment", "Discord Recruitment"] },
+    supervise: { key: "supervise", typeId: "superviseType", trainingId: "rtd-supervise-person", recruitsId: "rtd-supervise-recruits", listId: "supervise-recruit-list", addBtnId: "supervise-add-recruit", prefix: "superviseRecruitDiscord", recruitValues: ["Open Recruitment"] },
   };
 
   function addRecruitRow(group) {
@@ -176,7 +181,7 @@
   // and whenever the overall Role changes (via updateRtdBranch below).
   function syncRecruitToggle(group, panelActive) {
     const typeVal = document.getElementById(group.typeId).value;
-    const isRecruit = typeVal === "Open Recruitment";
+    const isRecruit = group.recruitValues.includes(typeVal);
     const trainingEl = document.getElementById(group.trainingId);
     const recruitsEl = document.getElementById(group.recruitsId);
     const showTraining = panelActive && !isRecruit;
@@ -204,6 +209,24 @@
     });
   }
 
+  // RTD Host -> "Discord Recruitment" isn't an on-duty shift — it's just
+  // a note that a recruitment happened over Discord — so it has no
+  // Duration on Duty or Shift Summary of its own. Both fields (which live
+  // outside #rtd-fields entirely, see log.html) hide and stop being
+  // required whenever that's the selected Host type; every other
+  // role/type combo, and every non-RTD subdivision, is unaffected.
+  function syncNoShiftFields() {
+    const role = document.getElementById("rtdRole").value;
+    const hostType = document.getElementById("hostType").value;
+    const noShift = role === "host" && hostType === "Discord Recruitment";
+    document.getElementById("rtd-duration-row").style.display = noShift ? "none" : "";
+    document.getElementById("rtd-summary-row").style.display = noShift ? "none" : "";
+    ["hoursOnDuty", "durationMinutes", "durationSeconds"].forEach((id) => {
+      document.getElementById(id).required = !noShift;
+    });
+    document.getElementById("summary").required = !noShift;
+  }
+
   function updateRtdBranch() {
     const role = document.getElementById("rtdRole").value; // "assist" | "host" | "supervise" | ""
     const panels = { assist: "rtd-assist", host: "rtd-host", supervise: "rtd-supervise" };
@@ -218,6 +241,7 @@
       document.getElementById(RECRUIT_GROUPS[key].typeId).required = active;
       syncRecruitToggle(RECRUIT_GROUPS[key], active);
     });
+    syncNoShiftFields();
   }
 
   function collectRtdFields() {
@@ -229,10 +253,10 @@
       result: val(`cadet${n}Result`),
       notes: val(`cadet${n}Notes`),
     });
-    const isOpenRecruitment = (typeId) => val(typeId) === "Open Recruitment";
-    const assistIsRecruit = role === "assist" && isOpenRecruitment("assistType");
-    const hostIsRecruit = role === "host" && isOpenRecruitment("hostType");
-    const superviseIsRecruit = role === "supervise" && isOpenRecruitment("superviseType");
+    const isRecruitType = (group) => group.recruitValues.includes(val(group.typeId));
+    const assistIsRecruit = role === "assist" && isRecruitType(RECRUIT_GROUPS.assist);
+    const hostIsRecruit = role === "host" && isRecruitType(RECRUIT_GROUPS.host);
+    const superviseIsRecruit = role === "supervise" && isRecruitType(RECRUIT_GROUPS.supervise);
     return {
       role,
       assistType: role === "assist" ? val("assistType") : "",

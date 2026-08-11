@@ -67,9 +67,18 @@ async function handleDecisionButton(context, interaction) {
     return ephemeral("Database isn't configured — couldn't save that decision.");
   }
   try {
+    // "AND status = 'pending'" closes a race where two people (or one
+    // person double-clicking) could Approve/Reject the same submission
+    // within moments of each other on Discord -- without this, both
+    // UPDATEs would match and "changes" would be 1 both times, so the
+    // second click would silently overwrite the first decision (and its
+    // decided_by) with no indication anything was already decided. With
+    // this guard, only the first click's UPDATE actually matches a row;
+    // the second gets changes=0 and falls into the "already decided"
+    // ephemeral reply below instead of clobbering the outcome.
     const result = await env.DB.prepare(
       `UPDATE submissions SET status = ?, decided_by = ?, decided_at = datetime('now')
-       WHERE id = ? AND subdivision_slug = ? AND form_type = ?`
+       WHERE id = ? AND subdivision_slug = ? AND form_type = ? AND status = 'pending'`
     )
       .bind(status, decidedByName, id, subdivisionSlug, formType)
       .run();

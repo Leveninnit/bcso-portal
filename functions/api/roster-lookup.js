@@ -1,11 +1,16 @@
 /**
  * Cloudflare Pages Function
  * GET /api/roster-lookup?discordId=...
+ * GET /api/roster-lookup?badgeNumber=...
  *
- * Looks up a single member in the Master Roster (Google Sheet) by Discord
- * ID and returns just that person's name / badge number / rank — never
- * the whole roster. Used by apply.html and log.html to auto-fill fields
- * so members don't have to re-type their own details.
+ * Looks up a single member in the Master Roster (Google Sheet) by either
+ * Discord ID or Badge Number (pass one or the other) and returns just
+ * that person's name / badge number / Discord ID / rank — never the
+ * whole roster. Used by apply.html and log.html to auto-fill fields so
+ * members don't have to re-type their own (or someone else's) details —
+ * e.g. log.html's Badge Number field, and RTD's FTO/Cadet/Supervised
+ * paired Badge+Discord ID fields, all use the same lookup by whichever
+ * value was typed in.
  *
  * Requires two Cloudflare environment variables (Settings -> Environment
  * variables in the Pages dashboard):
@@ -36,7 +41,7 @@
  * names/formatting and this function's expectations can be diagnosed.
  * Remove this block once auto-fill is confirmed working.
  */
-import { fetchRosterTable, lookupByDiscordId, normalizeId } from "../_lib/roster-sheet.js";
+import { fetchRosterTable, lookupByDiscordId, lookupByBadge, normalizeId } from "../_lib/roster-sheet.js";
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
@@ -51,6 +56,7 @@ export async function onRequestGet(context) {
   const { request, env } = context;
   const url = new URL(request.url);
   const discordId = normalizeId(url.searchParams.get("discordId"));
+  const badgeNumber = (url.searchParams.get("badgeNumber") || "").trim();
   const debug = url.searchParams.get("debug");
 
   const table = await fetchRosterTable(env, { debug: !!debug });
@@ -80,13 +86,19 @@ export async function onRequestGet(context) {
     );
   }
 
-  if (!discordId) {
-    return jsonResponse({ found: false, error: "Missing discordId." }, 400);
+  if (!badgeNumber && !discordId) {
+    return jsonResponse({ found: false, error: "Missing discordId or badgeNumber." }, 400);
   }
-  const person = lookupByDiscordId(table, discordId);
+  const person = badgeNumber ? lookupByBadge(table, badgeNumber) : lookupByDiscordId(table, discordId);
   if (!person.found) return jsonResponse({ found: false }, 200);
   return jsonResponse(
-    { found: true, name: person.name, badgeNumber: person.badgeNumber, rank: person.rank },
+    {
+      found: true,
+      name: person.name,
+      badgeNumber: person.badgeNumber,
+      discordId: person.discordId,
+      rank: person.rank,
+    },
     200
   );
 }

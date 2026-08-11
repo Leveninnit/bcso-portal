@@ -62,26 +62,17 @@
               </div>
             </div>
 
-            <!-- Duration applies to every subdivision, including RTD - it must never live inside a container that can be hidden. Collected as hours/minutes/seconds so shifts can be logged down to the second. -->
-            <div class="form-row">
-              <label for="hoursOnDuty">Duration on Duty *</label>
-              <div class="duration-row">
-                <input type="number" id="hoursOnDuty" name="durationHours" required min="0" max="24" step="1" placeholder="0" />
-                <span class="duration-unit">hrs</span>
-                <input type="number" id="durationMinutes" name="durationMinutes" required min="0" max="59" step="1" placeholder="0" />
-                <span class="duration-unit">min</span>
-                <input type="number" id="durationSeconds" name="durationSeconds" required min="0" max="59" step="1" placeholder="0" />
-                <span class="duration-unit">sec</span>
-              </div>
-            </div>
-
-            <!-- RTD-only fields. Mirrors the "BCSO | RTD | Activation Form"
-                 Google Form question-for-question (same wording, same
-                 dropdown options) so the Master Roster's hour/contribution
-                 formulas — which read the Google Form's response sheet —
-                 keep working unchanged. Hidden/inert for every other
-                 subdivision. Hours on Duty above is reused as the single
-                 duration value instead of asking for it a second time. -->
+            <!-- RTD-only fields. The submitted VALUES here (rank options,
+                 and the Assist/Host/Supervise "type" dropdown values) still
+                 mirror the "BCSO | RTD | Activation Form" Google Form,
+                 since those are what get forwarded to the Master Roster's
+                 "RTD | Activation Logs" sheet tab and its hour/contribution
+                 formulas (see functions/api/log.js forwardToSheet). The
+                 question LABELS below are just this page's copy — the
+                 sheet never reads them — so they've been reworded for
+                 clarity/consistency. Hidden/inert for every other
+                 subdivision. Placed before Duration on Duty so the form
+                 reads: who you are -> what you did -> how long -> summary. -->
             <div id="rtd-fields" style="display:none;">
               <div class="two-col">
                 <div class="form-row">
@@ -111,16 +102,18 @@
                   <select id="assistType" name="assistType">
                     <option value="">Select…</option>
                     <option value="Full BCSO Training">Full BCSO Training</option>
+                    <option value="Attempted Training">Attempted Training</option>
+                    <option value="Ride-along">Ride-along</option>
                     <option value="Open Recruitment">Open Recruitment</option>
                   </select>
                 </div>
                 <div class="two-col">
                   <div class="form-row">
-                    <label for="ftoBadge">What is your FTO's Badge Number? (Ex. 03221) *</label>
+                    <label for="ftoBadge">FTO Badge Number *</label>
                     <input type="text" id="ftoBadge" name="ftoBadge" placeholder="e.g. 03221" />
                   </div>
                   <div class="form-row">
-                    <label for="ftoDiscordId">What is your FTO's Discord Id? (Ex. 1002934806990041188) *</label>
+                    <label for="ftoDiscordId">FTO Discord ID *</label>
                     <input type="text" id="ftoDiscordId" name="ftoDiscordId" placeholder="e.g. 1002934806990041188" />
                   </div>
                 </div>
@@ -141,12 +134,12 @@
                 <div id="cadet-1">
                   <div class="two-col">
                     <div class="form-row">
-                      <label for="cadet1Badge">What was the Badge Number of Cadet #1 *</label>
-                      <input type="text" id="cadet1Badge" name="cadet1Badge" />
+                      <label for="cadet1Badge">Cadet #1 Badge Number *</label>
+                      <input type="text" id="cadet1Badge" name="cadet1Badge" placeholder="e.g. 1042" />
                     </div>
                     <div class="form-row">
-                      <label for="cadet1Discord">What was the Discord ID of Cadet #1 *</label>
-                      <input type="text" id="cadet1Discord" name="cadet1Discord" />
+                      <label for="cadet1Discord">Cadet #1 Discord ID *</label>
+                      <input type="text" id="cadet1Discord" name="cadet1Discord" placeholder="e.g. 372504974311632896" />
                     </div>
                   </div>
                   <div class="two-col">
@@ -160,7 +153,7 @@
                     </div>
                     <div class="form-row">
                       <label for="cadet1Notes">Cadet #1 Notes</label>
-                      <input type="text" id="cadet1Notes" name="cadet1Notes" />
+                      <input type="text" id="cadet1Notes" name="cadet1Notes" placeholder="Optional" />
                     </div>
                   </div>
                 </div>
@@ -168,12 +161,12 @@
                 <div id="cadet-2">
                   <div class="two-col">
                     <div class="form-row">
-                      <label for="cadet2Badge">Badge Number of Cadet #2 (If Present)</label>
-                      <input type="text" id="cadet2Badge" name="cadet2Badge" />
+                      <label for="cadet2Badge">Cadet #2 Badge Number (If Present)</label>
+                      <input type="text" id="cadet2Badge" name="cadet2Badge" placeholder="e.g. 1042" />
                     </div>
                     <div class="form-row">
-                      <label for="cadet2Discord">Discord ID of Cadet #2 (If Present)</label>
-                      <input type="text" id="cadet2Discord" name="cadet2Discord" />
+                      <label for="cadet2Discord">Cadet #2 Discord ID (If Present)</label>
+                      <input type="text" id="cadet2Discord" name="cadet2Discord" placeholder="e.g. 372504974311632896" />
                     </div>
                   </div>
                   <div class="two-col">
@@ -187,19 +180,19 @@
                     </div>
                     <div class="form-row">
                       <label for="cadet2Notes">Cadet #2 Notes (If Present)</label>
-                      <input type="text" id="cadet2Notes" name="cadet2Notes" />
+                      <input type="text" id="cadet2Notes" name="cadet2Notes" placeholder="Optional" />
                     </div>
                   </div>
                 </div>
                 <div id="cadet-3">
                   <div class="two-col">
                     <div class="form-row">
-                      <label for="cadet3Badge">Badge Number of Cadet #3 (If Present)</label>
-                      <input type="text" id="cadet3Badge" name="cadet3Badge" />
+                      <label for="cadet3Badge">Cadet #3 Badge Number (If Present)</label>
+                      <input type="text" id="cadet3Badge" name="cadet3Badge" placeholder="e.g. 1042" />
                     </div>
                     <div class="form-row">
-                      <label for="cadet3Discord">Discord ID of Cadet #3 (If Present)</label>
-                      <input type="text" id="cadet3Discord" name="cadet3Discord" />
+                      <label for="cadet3Discord">Cadet #3 Discord ID (If Present)</label>
+                      <input type="text" id="cadet3Discord" name="cadet3Discord" placeholder="e.g. 372504974311632896" />
                     </div>
                   </div>
                   <div class="two-col">
@@ -213,19 +206,19 @@
                     </div>
                     <div class="form-row">
                       <label for="cadet3Notes">Cadet #3 Notes (If Present)</label>
-                      <input type="text" id="cadet3Notes" name="cadet3Notes" />
+                      <input type="text" id="cadet3Notes" name="cadet3Notes" placeholder="Optional" />
                     </div>
                   </div>
                 </div>
                 <div id="cadet-4">
                   <div class="two-col">
                     <div class="form-row">
-                      <label for="cadet4Badge">Badge Number of Cadet #4 (If Present)</label>
-                      <input type="text" id="cadet4Badge" name="cadet4Badge" />
+                      <label for="cadet4Badge">Cadet #4 Badge Number (If Present)</label>
+                      <input type="text" id="cadet4Badge" name="cadet4Badge" placeholder="e.g. 1042" />
                     </div>
                     <div class="form-row">
-                      <label for="cadet4Discord">Discord ID of Cadet #4 (If Present)</label>
-                      <input type="text" id="cadet4Discord" name="cadet4Discord" />
+                      <label for="cadet4Discord">Cadet #4 Discord ID (If Present)</label>
+                      <input type="text" id="cadet4Discord" name="cadet4Discord" placeholder="e.g. 372504974311632896" />
                     </div>
                   </div>
                   <div class="two-col">
@@ -239,7 +232,7 @@
                     </div>
                     <div class="form-row">
                       <label for="cadet4Notes">Cadet #4 Notes (If Present)</label>
-                      <input type="text" id="cadet4Notes" name="cadet4Notes" />
+                      <input type="text" id="cadet4Notes" name="cadet4Notes" placeholder="Optional" />
                     </div>
                   </div>
                 </div>
@@ -251,20 +244,40 @@
                   <select id="superviseType" name="superviseType">
                     <option value="">Select…</option>
                     <option value="Full BCSO Training">Full BCSO Training</option>
+                    <option value="Attempted Training">Attempted Training</option>
                     <option value="Ride-along">Ride-along</option>
                     <option value="Open Recruitment">Open Recruitment</option>
                   </select>
                 </div>
                 <div class="two-col">
                   <div class="form-row">
-                    <label for="supervisedBadge">What is the Badge Number of the person you supervised? *</label>
-                    <input type="text" id="supervisedBadge" name="supervisedBadge" />
+                    <label for="supervisedBadge">Supervised Person's Badge Number *</label>
+                    <input type="text" id="supervisedBadge" name="supervisedBadge" placeholder="e.g. 1042" />
                   </div>
                   <div class="form-row">
-                    <label for="supervisedDiscordId">What is the Discord ID of the person you supervised? *</label>
-                    <input type="text" id="supervisedDiscordId" name="supervisedDiscordId" />
+                    <label for="supervisedDiscordId">Supervised Person's Discord ID *</label>
+                    <input type="text" id="supervisedDiscordId" name="supervisedDiscordId" placeholder="e.g. 372504974311632896" />
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- Duration applies to every subdivision, including RTD - it
+                 must never live inside a container that can be hidden.
+                 Placed after the RTD role/branch fields above (when shown)
+                 so the form reads who you are -> what you did -> how long
+                 -> summary, instead of asking for duration before you've
+                 even said what you did. Collected as hours/minutes/seconds
+                 so shifts can be logged down to the second. -->
+            <div class="form-row">
+              <label for="hoursOnDuty">Duration on Duty *</label>
+              <div class="duration-row">
+                <input type="number" id="hoursOnDuty" name="durationHours" required min="0" max="24" step="1" placeholder="0" />
+                <span class="duration-unit">hrs</span>
+                <input type="number" id="durationMinutes" name="durationMinutes" required min="0" max="59" step="1" placeholder="0" />
+                <span class="duration-unit">min</span>
+                <input type="number" id="durationSeconds" name="durationSeconds" required min="0" max="59" step="1" placeholder="0" />
+                <span class="duration-unit">sec</span>
               </div>
             </div>
 

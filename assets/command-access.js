@@ -256,7 +256,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     panel.innerHTML = `
       <div class="panel">
         <p class="ca-section-title">Rank Options</p>
-        <p class="ca-muted">${activeSlug === "rtd" ? "RTD already has its own dedicated Rank dropdown (kept in sync with the Google Sheet) and doesn't use this list." : `Add the ranks deputies can pick from on ${subInfo(activeSlug).short}'s Activity Log and Roster forms. Order matters: arrange these highest to lowest — it's used to sort ${subInfo(activeSlug).short}'s Roster and controls what shows up in both Rank dropdowns. Leave this empty to keep the original free-text Rank fields (and manual Roster order).`}</p>
+        <p class="ca-muted">${activeSlug === "rtd" ? "RTD already has its own dedicated Rank dropdown (kept in sync with the Google Sheet) and doesn't use this list." : `Add the ranks deputies can pick from on ${subInfo(activeSlug).short}'s Activity Log and Roster forms. Order matters: drag rows to arrange these highest to lowest — it saves as soon as you drop, and this order is used to sort ${subInfo(activeSlug).short}'s Roster and controls what shows up in both Rank dropdowns. Leave this empty to keep the original free-text Rank fields (and manual Roster order).`}</p>
         <div id="ca-rank-list">Loading…</div>
         <div class="ca-question-form" id="ca-add-rank-form"></div>
       </div>
@@ -279,12 +279,13 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       }
       list.innerHTML = options
         .map(
-          (o, i) => `
-          <div class="ca-question-row">
-            <div><strong>${escapeHtml(o.label)}</strong></div>
+          (o) => `
+          <div class="ca-question-row ca-roster-row" data-rank-id="${o.id}" draggable="true">
+            <div class="ca-roster-row-main">
+              <span class="ca-drag-handle" title="Drag to reorder" aria-hidden="true">⠿</span>
+              <div><strong>${escapeHtml(o.label)}</strong></div>
+            </div>
             <div class="ca-actions">
-              <button class="ca-btn-delete" data-rkaction="up" data-rkid="${o.id}" ${i === 0 ? "disabled" : ""}>↑</button>
-              <button class="ca-btn-delete" data-rkaction="down" data-rkid="${o.id}" ${i === options.length - 1 ? "disabled" : ""}>↓</button>
               <button class="ca-btn-reject" data-rkaction="delete" data-rkid="${o.id}">Delete</button>
             </div>
           </div>
@@ -294,6 +295,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       list.querySelectorAll("[data-rkaction]").forEach((btn) => {
         btn.addEventListener("click", () => handleRankAction(btn.dataset.rkaction, options, btn.dataset.rkid));
       });
+      setupRankDragReorder(list, options);
     } catch {
       list.innerHTML = `<p class="ca-muted">Couldn't load rank options. Try refreshing.</p>`;
     }
@@ -308,15 +310,66 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       loadRankOptions();
       return;
     }
-    const idx = options.findIndex((x) => String(x.id) === String(id));
-    const swapIdx = action === "up" ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= options.length) return;
-    const other = options[swapIdx];
-    await Promise.all([
-      putRankOption({ ...o, sortOrder: other.sortOrder }),
-      putRankOption({ ...other, sortOrder: o.sortOrder }),
-    ]);
-    loadRankOptions();
+  }
+
+  // Drag-and-drop reordering — same pattern as the Roster list's
+  // setupRosterDragReorder above. Drag a rank by its ⠿ handle (or
+  // anywhere on the row) and drop it on another rank to move it there;
+  // saves immediately on drop (every option's sortOrder is rewritten to
+  // its new position), then reloads from the server to confirm.
+  let rankDragId = null;
+  function setupRankDragReorder(list, options) {
+    list.querySelectorAll(".ca-roster-row").forEach((row) => {
+      row.addEventListener("dragstart", (ev) => {
+        rankDragId = row.dataset.rankId;
+        row.classList.add("ca-dragging");
+        if (ev.dataTransfer) {
+          ev.dataTransfer.effectAllowed = "move";
+          try {
+            ev.dataTransfer.setData("text/plain", row.dataset.rankId);
+          } catch {}
+        }
+      });
+      row.addEventListener("dragend", () => {
+        rankDragId = null;
+        list.querySelectorAll(".ca-roster-row").forEach((r) => {
+          r.classList.remove("ca-dragging");
+          r.classList.remove("ca-drag-over");
+        });
+      });
+      row.addEventListener("dragover", (ev) => {
+        if (!rankDragId || rankDragId === row.dataset.rankId) return;
+        ev.preventDefault();
+        if (ev.dataTransfer) ev.dataTransfer.dropEffect = "move";
+        row.classList.add("ca-drag-over");
+      });
+      row.addEventListener("dragleave", () => {
+        row.classList.remove("ca-drag-over");
+      });
+      row.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        row.classList.remove("ca-drag-over");
+        if (!rankDragId || rankDragId === row.dataset.rankId) return;
+        reorderRankOptions(options, rankDragId, row.dataset.rankId);
+      });
+    });
+  }
+
+  async function reorderRankOptions(options, draggedId, targetId) {
+    const fromIdx = options.findIndex((x) => String(x.id) === String(draggedId));
+    const toIdx = options.findIndex((x) => String(x.id) === String(targetId));
+    if (fromIdx === -1 || toIdx === -1) return;
+    const reordered = options.slice();
+    const [moved] = reordered.splice(fromIdx, 1);
+    reordered.splice(toIdx, 0, moved);
+    const list = el("ca-rank-list");
+    list.style.opacity = "0.6";
+    try {
+      await Promise.all(reordered.map((o, i) => putRankOption({ ...o, sortOrder: i })));
+    } finally {
+      list.style.opacity = "";
+      loadRankOptions();
+    }
   }
 
   function putRankOption(o) {

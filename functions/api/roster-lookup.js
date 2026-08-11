@@ -36,12 +36,17 @@
  * reason, this fails soft (found: false) so the application/log forms
  * keep working — auto-fill is a convenience, never a requirement.
  *
- * TEMPORARY: pass &debug=1 to get back the parsed header row and row
- * count (no personal data) so mismatches between the sheet's column
- * names/formatting and this function's expectations can be diagnosed.
- * Remove this block once auto-fill is confirmed working.
+ * DIAGNOSTIC: pass &debug=1 to get back the parsed header row, row count,
+ * and the raw (unmodified) Discord ID column so mismatches between the
+ * sheet's column names/formatting and this function's expectations can be
+ * diagnosed. A Discord ID is still PII even without a name attached to
+ * it, so this requires a valid Command Access session (any subdivision) —
+ * an unauthenticated request with &debug=1 is silently treated as a
+ * normal (non-debug) request instead of being told it needs to log in,
+ * so it can't be used to probe whether debug mode exists.
  */
 import { fetchRosterTable, lookupByDiscordId, lookupByBadge, normalizeId } from "../_lib/roster-sheet.js";
+import { requireSession } from "../_lib/auth-guard.js";
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
@@ -57,9 +62,9 @@ export async function onRequestGet(context) {
   const url = new URL(request.url);
   const discordId = normalizeId(url.searchParams.get("discordId"));
   const badgeNumber = (url.searchParams.get("badgeNumber") || "").trim();
-  const debug = url.searchParams.get("debug");
+  const debug = url.searchParams.get("debug") ? !!(await requireSession(request, env)) : false;
 
-  const table = await fetchRosterTable(env, { debug: !!debug });
+  const table = await fetchRosterTable(env, { debug });
   if (!table || !table.rows) {
     return jsonResponse(debug ? { found: false, ...table } : { found: false }, 200);
   }

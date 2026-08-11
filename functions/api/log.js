@@ -114,7 +114,11 @@ function formatDuration(h, m, s) {
 }
 
 function cleanAnswers(answers) {
-  if (!answers || typeof answers !== "object") return {};
+  // typeof [] === "object" too, so this excludes arrays explicitly --
+  // otherwise `answers: [...]` slipped past the shape check and got keyed
+  // by array index (Object.entries([...]) yields "0", "1", ... keys)
+  // instead of being rejected as the wrong shape.
+  if (!answers || typeof answers !== "object" || Array.isArray(answers)) return {};
   const out = {};
   for (const [key, value] of Object.entries(answers)) {
     if (!/^\d+$/.test(String(key))) continue; // question ids are numeric

@@ -53,6 +53,22 @@ const LOG_LIMIT = 200;
 // client-side -- see assets/leaderboards.js) so "This Month" can mean
 // the viewer's own calendar month instead of always UTC's.
 const DATETIME_RE = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/;
+// A calendar month is never more than 31 days -- this caps how wide a
+// monthStart/monthEnd span this endpoint will honor. Without it,
+// DATETIME_RE only validates the *format* of the two params, so a crafted
+// link could pass a monthStart/monthEnd pair spanning years (still
+// labeled "This Month" by the caller) and pull far more data than the
+// "this month" scoping is meant to allow, or pass monthEnd <= monthStart
+// for a query that silently matches nothing.
+const MAX_MONTH_SPAN_MS = 32 * 24 * 60 * 60 * 1000;
+
+function isReasonableMonthRange(startParam, endParam) {
+  const start = Date.parse(startParam.replace(" ", "T") + "Z");
+  const end = Date.parse(endParam.replace(" ", "T") + "Z");
+  if (!Number.isFinite(start) || !Number.isFinite(end)) return false;
+  if (end <= start) return false;
+  return end - start <= MAX_MONTH_SPAN_MS;
+}
 
 function jsonResponse(body, status) {
   return new Response(JSON.stringify(body), {
@@ -81,7 +97,10 @@ export async function onRequestGet(context) {
   const period = url.searchParams.get("period") === "month" ? "month" : "all";
   const monthStartParam = url.searchParams.get("monthStart") || "";
   const monthEndParam = url.searchParams.get("monthEnd") || "";
-  const hasLocalMonthBounds = DATETIME_RE.test(monthStartParam) && DATETIME_RE.test(monthEndParam);
+  const hasLocalMonthBounds =
+    DATETIME_RE.test(monthStartParam) &&
+    DATETIME_RE.test(monthEndParam) &&
+    isReasonableMonthRange(monthStartParam, monthEndParam);
 
   if (!env.DB) {
     return jsonResponse(emptyPayload(), 200);

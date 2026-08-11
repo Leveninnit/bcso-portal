@@ -145,6 +145,7 @@
                     <option value="Attempted Training">Attempted Training</option>
                     <option value="Ride-along">Ride-along</option>
                     <option value="Open Recruitment">Open Recruitment</option>
+                    <option value="Discord Recruitment">Discord Recruitment</option>
                   </select>
                 </div>
                 <div id="rtd-host-training">
@@ -311,14 +312,21 @@
               </div>
             </div>
 
-            <!-- Duration applies to every subdivision, including RTD - it
-                 must never live inside a container that can be hidden.
-                 Placed after the RTD role/branch fields above (when shown)
-                 so the form reads who you are -> what you did -> how long
-                 -> summary, instead of asking for duration before you've
-                 even said what you did. Collected as hours/minutes/seconds
-                 so shifts can be logged down to the second. -->
-            <div class="form-row">
+            <!-- Duration applies to every subdivision, including RTD, and
+                 must never live inside the #rtd-fields role/branch toggle
+                 (it needs to stay visible across every role/type combo
+                 that DOES have a shift). Placed after the RTD role/branch
+                 fields above (when shown) so the form reads who you are ->
+                 what you did -> how long -> summary, instead of asking for
+                 duration before you've even said what you did. Collected
+                 as hours/minutes/seconds so shifts can be logged down to
+                 the second. The one exception is RTD's Host ->
+                 "Discord Recruitment" — that's not an on-duty shift, just
+                 a note that a recruitment happened over Discord, so
+                 assets/log.js's syncNoShiftFields() hides this row (and
+                 Shift Summary below) and drops their `required` for that
+                 one case only. -->
+            <div class="form-row" id="rtd-duration-row">
               <label for="hoursOnDuty">Duration on Duty *</label>
               <div class="duration-row">
                 <input type="number" id="hoursOnDuty" name="durationHours" required min="0" max="24" step="1" placeholder="0" />
@@ -330,7 +338,7 @@
               </div>
             </div>
 
-            <div class="form-row">
+            <div class="form-row" id="rtd-summary-row">
               <label for="summary">Shift Summary *</label>
               <textarea id="summary" name="summary" required minlength="10" placeholder="What did you do this shift? Patrols, arrests, notable incidents, etc."></textarea>
               <span class="hint">Minimum 10 characters.</span>

@@ -263,18 +263,39 @@ export async function resolveWebhookChannelId(webhookUrl) {
  *
  * Never throws -- returns { ok: false } on any failure so a
  * message-tracking problem never blocks the underlying submission.
+ *
+ * `files` (optional): an array of { name, contentType, data } to attach
+ * -- data is raw bytes (Uint8Array/ArrayBuffer). When present, the
+ * request is sent as multipart/form-data (the `payload_json` field plus
+ * one `files[n]` part per attachment, matching Discord's own convention
+ * for both bot messages and webhooks) instead of a plain JSON body, and
+ * `payload_json`'s embeds can reference an attachment via
+ * `attachment://<name>` in an embed's image/thumbnail url -- see log.js's
+ * recruitment-screenshot embed for an example. `fetch` sets the
+ * multipart Content-Type (including its boundary) itself when the body
+ * is a FormData instance, so it's deliberately not set by hand here.
  */
-export async function postBotMessage(env, channelId, payload) {
+export async function postBotMessage(env, channelId, payload, files) {
   if (!channelId) return { ok: false, error: "No channel id (webhook lookup failed)." };
   if (!env.DISCORD_BOT_TOKEN) return { ok: false, error: "DISCORD_BOT_TOKEN is not configured." };
   try {
+    const headers = { Authorization: `Bot ${env.DISCORD_BOT_TOKEN}` };
+    let body;
+    if (files && files.length) {
+      const form = new FormData();
+      form.append("payload_json", JSON.stringify(payload));
+      files.forEach((file, i) => {
+        form.append(`files[${i}]`, new Blob([file.data], { type: file.contentType }), file.name);
+      });
+      body = form;
+    } else {
+      headers["Content-Type"] = "application/json";
+      body = JSON.stringify(payload);
+    }
     const res = await fetch(`https://discord.com/api/channels/${channelId}/messages`, {
       method: "POST",
-      headers: {
-        Authorization: `Bot ${env.DISCORD_BOT_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
+      headers,
+      body,
     });
     if (!res.ok) {
       return { ok: false, status: res.status, body: await res.text().catch(() => "") };

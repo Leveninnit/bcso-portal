@@ -13,7 +13,7 @@
 <div id="site-header-mount"></div>
 <main>
 <section>
-<div class="container">
+<div class="container roster-container">
 <div class="breadcrumb" id="roster-breadcrumb"><a href="index.html">Home</a> / Roster</div>
 <h1 class="page-title" id="roster-title">Roster</h1>
 <p class="page-sub" id="roster-subtitle">Current members, kept up to date by command staff.</p>
@@ -93,10 +93,14 @@ return `<td class="${cls} rt-copyable-active" data-copy="${safe}" title="${title
 // roster-table CSS -- this replaced the old overflow-x:auto scrollbar so
 // the roster fits the page without horizontal scrolling), rank names can
 // still be longer than their column. Same ellipsis + title-on-hover
-// treatment as the truncate option above.
-function renderTruncatedCell(value, extraClass) {
+// treatment as the truncate option above. Pass noTruncate for a column
+// (Rank) that should never show "…" — it wraps onto a second line
+// instead (see .roster-table td.rt-rank in style.css), and the page's
+// container is widened for this page specifically (.roster-container)
+// so that's rarely even needed.
+function renderTruncatedCell(value, extraClass, noTruncate) {
 const safe = escapeHtml(value || "");
-const cls = ["rt-truncate", extraClass].filter(Boolean).join(" ");
+const cls = [noTruncate ? "" : "rt-truncate", extraClass].filter(Boolean).join(" ");
 if (!value) return `<td class="${cls}"><span class="rt-empty">&mdash;</span></td>`;
 return `<td class="${cls}" title="${safe}">${safe}</td>`;
 }
@@ -349,7 +353,7 @@ const rows = entries
 .map(
 (e) => `
 <tr>
-${renderTruncatedCell(e.rank, "rt-rank")}
+${renderTruncatedCell(e.rank, "rt-rank", true)}
 ${copyableCell(e.badgeNumber)}
 ${e.characterName ? copyableCell(e.characterName, "rt-name", true) : `<td class="rt-name rt-truncate"><span class="rt-empty">Not on Master Roster</span></td>`}
 ${copyableCell(e.discordId, "rt-discord", true)}
@@ -365,20 +369,24 @@ ${copyableCell(e.discordId, "rt-discord", true)}
 // Fixed-width columns (see .roster-table's table-layout:fixed in
 // style.css) so the whole table always fits the page width instead of
 // needing the horizontal scrollbar the old auto-width table forced on
-// desktop. Percentages sum to 100.
+// desktop. Percentages sum to 100. Rank gets a wider share than the
+// others (and the page's .roster-container is itself wider than the
+// site's usual container) so full rank titles fit without wrapping in
+// the common case -- it's also the one column that never ellipsizes
+// even if it does wrap (see renderTruncatedCell's noTruncate above).
 grid.innerHTML = `
 <div class="roster-table-wrap">
 <table class="roster-table">
 <colgroup>
+<col style="width:16%">
+<col style="width:6%">
 <col style="width:12%">
-<col style="width:7%">
 <col style="width:11%">
-<col style="width:13%">
-<col style="width:12%">
-<col style="width:7%">
-<col style="width:9%">
-<col style="width:12%">
-<col style="width:17%">
+<col style="width:11%">
+<col style="width:6%">
+<col style="width:8%">
+<col style="width:11%">
+<col style="width:19%">
 </colgroup>
 <thead>
 <tr>

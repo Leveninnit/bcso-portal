@@ -21,6 +21,7 @@ Official department documents, kept up to date in Google Docs.
 Each link opens the live document in a new tab so you always
 see the current version.
 </p>
+<p class="page-sub" id="doc-roster-link" style="display:none;"></p>
 <p class="page-sub" id="doc-sop-link" style="display:none;"></p>
 <div id="doc-grid" class="sub-grid">
 <!-- populated by JS from assets/documents.js -->
@@ -86,6 +87,9 @@ document.title = sub.name + " Documents — BCSO";
 document.getElementById("doc-subtitle").textContent =
 "Documents specific to the " + sub.name + ", kept up to date by its own command staff.";
 document.getElementById("sub-doc-section").style.display = "none";
+const rosterLinkEl = document.getElementById("doc-roster-link");
+rosterLinkEl.innerHTML = `<a href="roster.html?div=${encodeURIComponent(sub.slug)}" class="btn btn-outline">View ${escapeHtml(sub.short)} Roster →</a>`;
+rosterLinkEl.style.display = "";
 const sopLinkEl = document.getElementById("doc-sop-link");
 sopLinkEl.innerHTML = `<a href="subdivision-sop.html?div=${encodeURIComponent(sub.slug)}" class="btn btn-outline">View ${escapeHtml(sub.short)} SOP →</a>`;
 sopLinkEl.style.display = "";
@@ -111,7 +115,10 @@ grid.innerHTML = docs.map((d) => {
 // subdivision's own dedicated Roster page (roster.html?div=slug) — so
 // instead of opening the old document, it navigates there. Matched by
 // name only; the actual url stored for this document (Command Access
-// -> Documents) is unused in this case.
+// -> Documents) is unused in this case. Now redundant with the
+// always-present "View ... Roster →" button above (same treatment as
+// the SOP button) -- kept for any subdivision that still has this
+// document entry lying around from before that button existed.
 const isMainRoster = (d.name || "").trim().toLowerCase() === "main roster";
 if (isMainRoster) {
 return `

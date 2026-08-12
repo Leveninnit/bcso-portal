@@ -979,6 +979,14 @@ footer.site-footer a {
    Roster; Character Name and Discord ID shown here are resolved live
    from the Master Roster by badge number (see functions/api/roster.js). */
 
+/* Wider than the site's usual 1100px .container -- gives the Rank column
+   (and every other column) more breathing room so full rank titles fit
+   without truncating. Only applied on roster.html (see the
+   "container roster-container" div there). */
+.roster-container {
+  max-width: 1320px;
+}
+
 .roster-table-wrap {
   /* Fallback only — the table itself is fixed-width and sized to fit
      its container (see .roster-table below), so this shouldn't trigger
@@ -1064,6 +1072,14 @@ footer.site-footer a {
 .roster-table td.rt-rank {
   color: var(--gold-bright);
   font-weight: 600;
+  /* Never ellipsized (see renderTruncatedCell's noTruncate in
+     roster.html) -- the wider .roster-container plus this column's own
+     larger share of the table (see the colgroup in roster.html) means
+     it fits on one line in the common case, but if a rank title is
+     still too long it wraps onto a second line instead of showing "…". */
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
 }
 
 .roster-table td.rt-name {

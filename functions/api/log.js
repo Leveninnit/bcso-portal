@@ -63,6 +63,16 @@ const FIELD_LIMITS = {
 };
 const MIN_FORM_FILL_MS = 3000; // real humans take at least a few seconds
 
+// RTD Open/Discord Recruitment screenshot upload. Decoded-byte cap matches
+// the client's own downscale/recompress target (assets/log.js), so a
+// well-behaved browser submission should never actually hit this — it's a
+// backstop against a hand-crafted request. The data-URL string itself is
+// capped a bit higher (base64 is ~4/3 the size of the decoded bytes, plus
+// the "data:image/...;base64," prefix) so a legitimate max-size image
+// isn't truncated by cleanRtd before it ever reaches parseImageDataUrl.
+const MAX_SHOT_BYTES = 4 * 1024 * 1024;
+const MAX_SHOT_DATA_URL_LEN = 6 * 1024 * 1024;
+
 function clean(value, maxLen) {
   if (typeof value !== "string") return "";
   // See apply.js's clean() for why this preserves single line breaks
@@ -84,6 +94,36 @@ function jsonResponse(body, status) {
     status,
     headers: { "Content-Type": "application/json" },
   });
+}
+
+// Validates + decodes an RTD recruitment screenshot submitted as a data
+// URL (e.g. "data:image/png;base64,...", built client-side in
+// assets/log.js). Deliberately NOT run through clean() above -- that
+// helper collapses whitespace and would corrupt the base64 payload.
+// Returns null (never throws) on anything malformed, oversized, or not an
+// allowed image type, so the caller can turn that into a clean 400 rather
+// than a 500.
+function parseImageDataUrl(dataUrl) {
+  if (typeof dataUrl !== "string" || !dataUrl) return null;
+  if (dataUrl.length > MAX_SHOT_DATA_URL_LEN) return null;
+  const match = /^data:image\/(png|jpe?g|webp);base64,([A-Za-z0-9+/]+=*)$/.exec(dataUrl.trim());
+  if (!match) return null;
+  const kind = match[1] === "jpg" ? "jpeg" : match[1];
+  let bytes;
+  try {
+    const binary = atob(match[2]);
+    bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  } catch {
+    return null;
+  }
+  if (!bytes.length || bytes.length > MAX_SHOT_BYTES) return null;
+  const ext = kind === "jpeg" ? "jpg" : kind;
+  return {
+    data: bytes,
+    contentType: `image/${kind}`,
+    name: `recruitment-screenshot.${ext}`,
+  };
 }
 
 // "2.5" hours -> "2:30:00", matching the H:MM:SS text the Google Form's
@@ -139,12 +179,19 @@ function cleanRtd(rtd) {
       .map((v) => clean(v, 100))
       .filter(Boolean)
       .slice(0, 25);
+  // Recruitment screenshots (data URLs) -- passed through raw rather than
+  // via clean() (which would corrupt base64), just length-capped and
+  // type-checked here. Full validation/decoding happens in
+  // parseImageDataUrl() once we know which one (if any) is actually the
+  // active submission below.
+  const cleanShot = (v) => (typeof v === "string" && v.length <= MAX_SHOT_DATA_URL_LEN ? v : "");
   return {
     role: c(r.role), // "assist" | "host" | "supervise"
     assistType: c(r.assistType),
     ftoBadge: c(r.ftoBadge),
     ftoDiscordId: c(r.ftoDiscordId),
     assistRecruits: cleanRecruits(r.assistRecruits),
+    assistScreenshot: cleanShot(r.assistScreenshot),
     hostType: c(r.hostType),
     cadets: [0, 1, 2, 3].map((i) => ({
       badge: c(cadets[i] && cadets[i].badge),
@@ -153,10 +200,12 @@ function cleanRtd(rtd) {
       notes: clean(cadets[i] && cadets[i].notes, 500),
     })),
     hostRecruits: cleanRecruits(r.hostRecruits),
+    hostScreenshot: cleanShot(r.hostScreenshot),
     superviseType: c(r.superviseType),
     supervisedBadge: c(r.supervisedBadge),
     supervisedDiscordId: c(r.supervisedDiscordId),
     superviseRecruits: cleanRecruits(r.superviseRecruits),
+    superviseScreenshot: cleanShot(r.superviseScreenshot),
   };
 }
 
@@ -439,6 +488,32 @@ export async function onRequestPost(context) {
     }
   }
 
+  // --- RTD only: validate the recruitment screenshot, if one was sent ---
+  // Only whichever recruit panel is actually "live" for this submission
+  // can supply a screenshot (mirrors the same role/type branching used to
+  // pick the "Recruited" embed field above) -- a screenshot left in a
+  // panel the user isn't currently submitting through is ignored.
+  let screenshotFile = null;
+  if (rtd) {
+    let rawScreenshot = "";
+    if (rtd.role === "assist" && rtd.assistType === "Open Recruitment") {
+      rawScreenshot = rtd.assistScreenshot;
+    } else if (rtd.role === "host" && (rtd.hostType === "Open Recruitment" || rtd.hostType === "Discord Recruitment")) {
+      rawScreenshot = rtd.hostScreenshot;
+    } else if (rtd.role === "supervise" && rtd.superviseType === "Open Recruitment") {
+      rawScreenshot = rtd.superviseScreenshot;
+    }
+    if (rawScreenshot) {
+      screenshotFile = parseImageDataUrl(rawScreenshot);
+      if (!screenshotFile) {
+        return jsonResponse(
+          { error: "That screenshot couldn't be processed. Please try a different image (PNG, JPG, or WebP, under 4MB)." },
+          400
+        );
+      }
+    }
+  }
+
   // --- Resolve which webhook to send to ---------------------------------
   const webhookUrl = resolveWebhookUrl(env, "log", subdivisionSlug);
   if (!webhookUrl) {
@@ -525,6 +600,12 @@ export async function onRequestPost(context) {
     footer: { text: "Blaine County Sheriff's Office • Activity Logs" },
     timestamp: new Date().toISOString(),
   };
+  // Shows the uploaded recruitment screenshot full-size inline on the
+  // embed, referencing the file that gets attached to this same message
+  // below (see postBotMessage's `files` param / attachment:// convention).
+  if (screenshotFile) {
+    embed.image = { url: `attachment://${screenshotFile.name}` };
+  }
 
   // Ping the subdivision's command role, same as applications already do.
   // Real pings only happen for this one explicitly-allowed role ID —
@@ -543,7 +624,12 @@ export async function onRequestPost(context) {
   // work. The webhook URL is still how this channel is configured (no new
   // env vars needed) -- it's just used to look up the channel id here.
   const logChannelId = await resolveWebhookChannelId(webhookUrl);
-  const postResult = await postBotMessage(env, logChannelId, discordPayload);
+  const postResult = await postBotMessage(
+    env,
+    logChannelId,
+    discordPayload,
+    screenshotFile ? [screenshotFile] : undefined
+  );
   if (!postResult.ok) {
     console.error("Discord bot post rejected the log:", postResult.status, postResult.body || postResult.error);
     return jsonResponse({ error: "Discord rejected the log entry. Please try again or contact command staff." }, 502);
@@ -563,6 +649,14 @@ export async function onRequestPost(context) {
   }
 
   // --- Record it for Command Access (best-effort; never blocks the submitter) ---
+  // The screenshot's raw base64 is deliberately NOT stored here (it's
+  // already on Discord, linked via discord_message_id/discord_channel_id
+  // below) -- only a boolean flag, to keep this table lean.
+  let rtdForStorage = rtd;
+  if (rtd) {
+    const { assistScreenshot, hostScreenshot, superviseScreenshot, ...rtdRest } = rtd;
+    rtdForStorage = { ...rtdRest, hasRecruitScreenshot: !!screenshotFile };
+  }
   let submissionId = null;
   if (env.DB) {
     try {
@@ -576,7 +670,7 @@ export async function onRequestPost(context) {
           characterName,
           badgeNumber,
           rank,
-          JSON.stringify({ durationSeconds: totalSeconds, durationDisplay, summary, rtd }),
+          JSON.stringify({ durationSeconds: totalSeconds, durationDisplay, summary, rtd: rtdForStorage }),
           JSON.stringify(answers),
           postResult.messageId,
           postResult.channelId

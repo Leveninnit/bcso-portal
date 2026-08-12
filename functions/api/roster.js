@@ -50,6 +50,14 @@
  * tiebreaker within the same rank. If no rank list is configured (or a
  * roster entry's rank doesn't match one of the configured options), it
  * falls back to the roster's own manual order, exactly as before.
+ *
+ * Activity exemption: a rank option can be flagged isActivityExempt
+ * (Command Access -> that subdivision -> Ranks). Any roster entry whose
+ * rank matches one of those flagged options shows activityLevel
+ * "Exempt" instead of a computed Active / Semi-Active / Inactive rating
+ * — for ranks (e.g. senior command) that aren't held to the same
+ * activity requirement as the rest of the subdivision. Same matching
+ * rule as the rank-hierarchy sort above (case-insensitive, trimmed).
  */
 import { fetchRosterTable, lookupByBadge, normalizeBadge } from "../_lib/roster-sheet.js";
 import { getContentMeta } from "../_lib/content-meta.js";
@@ -95,17 +103,20 @@ export async function onRequestGet(context) {
     if (!rows.length) return jsonResponse({ entries: [], lastUpdated }, 200);
 
     let rankPosition = null;
+    let exemptRanks = null;
     try {
       const { results: rankRows } = await env.DB.prepare(
-        "SELECT label FROM rank_options WHERE subdivision_slug = ? ORDER BY sort_order ASC, id ASC"
+        "SELECT label, is_activity_exempt FROM rank_options WHERE subdivision_slug = ? ORDER BY sort_order ASC, id ASC"
       )
         .bind(div)
         .all();
       if (rankRows && rankRows.length) {
         rankPosition = new Map();
+        exemptRanks = new Set();
         rankRows.forEach((r, i) => {
           const key = normalizeRankLabel(r.label);
           if (!rankPosition.has(key)) rankPosition.set(key, i);
+          if (r.is_activity_exempt) exemptRanks.add(key);
         });
       }
     } catch (err) {
@@ -173,6 +184,7 @@ export async function onRequestGet(context) {
       const badge = normalizeBadge(r.badge_number);
       const totals = allTime.get(badge) || { hours: 0, count: 0 };
       const monthTotals = thisMonth.get(badge) || { hours: 0, count: 0 };
+      const isExempt = exemptRanks ? exemptRanks.has(normalizeRankLabel(r.rank)) : false;
       return {
         rank: r.rank,
         badgeNumber: r.badge_number,
@@ -182,7 +194,7 @@ export async function onRequestGet(context) {
         departmentStatus: person.found ? person.departmentStatus : "",
         hoursLogged: Math.round(totals.hours * 10) / 10,
         activations: totals.count,
-        activityLevel: activityLevelFor(monthTotals.hours, monthTotals.count),
+        activityLevel: isExempt ? "Exempt" : activityLevelFor(monthTotals.hours, monthTotals.count),
       };
     });
     return jsonResponse({ entries, lastUpdated }, 200);

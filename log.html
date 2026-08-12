@@ -133,6 +133,28 @@
                     </div>
                   </div>
                   <button type="button" class="rtd-add-recruit" id="assist-add-recruit">+ Add another recruit</button>
+                  <div class="rtd-shot" data-shot-group="assist">
+                    <p class="hint">Add a screenshot as proof of the recruitment (optional, but recommended). Drag &amp; drop, click to browse, or paste an image with Ctrl+V.</p>
+                    <div class="rtd-shot-dropzone" id="assist-shot-dropzone" tabindex="0" role="button" aria-label="Upload a recruitment screenshot">
+                      <input type="file" id="assist-shot-input" accept="image/*" class="rtd-shot-file-input" tabindex="-1" />
+                      <div class="rtd-shot-idle" id="assist-shot-idle">
+                        <svg class="rtd-shot-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <p><strong>Click to upload</strong>, drag &amp; drop, or paste a screenshot</p>
+                        <p class="rtd-shot-hint-small">PNG or JPG, up to 15MB</p>
+                      </div>
+                      <div class="rtd-shot-progress" id="assist-shot-progress" style="display:none;">
+                        <div class="rtd-shot-progress-track"><div class="rtd-shot-progress-fill" id="assist-shot-progress-fill"></div></div>
+                        <p class="rtd-shot-progress-label" id="assist-shot-progress-label">Reading image…</p>
+                      </div>
+                      <div class="rtd-shot-preview" id="assist-shot-preview" style="display:none;">
+                        <img id="assist-shot-img" alt="Recruitment screenshot preview" />
+                        <div class="rtd-shot-overlay">
+                          <button type="button" class="rtd-shot-remove" id="assist-shot-remove">✕ Remove</button>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="rtd-shot-error" id="assist-shot-error" style="display:none;"></p>
+                  </div>
                 </div>
               </div>
 
@@ -270,6 +292,28 @@
                     </div>
                   </div>
                   <button type="button" class="rtd-add-recruit" id="host-add-recruit">+ Add another recruit</button>
+                  <div class="rtd-shot" data-shot-group="host">
+                    <p class="hint">Add a screenshot as proof of the recruitment (optional, but recommended). Drag &amp; drop, click to browse, or paste an image with Ctrl+V.</p>
+                    <div class="rtd-shot-dropzone" id="host-shot-dropzone" tabindex="0" role="button" aria-label="Upload a recruitment screenshot">
+                      <input type="file" id="host-shot-input" accept="image/*" class="rtd-shot-file-input" tabindex="-1" />
+                      <div class="rtd-shot-idle" id="host-shot-idle">
+                        <svg class="rtd-shot-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <p><strong>Click to upload</strong>, drag &amp; drop, or paste a screenshot</p>
+                        <p class="rtd-shot-hint-small">PNG or JPG, up to 15MB</p>
+                      </div>
+                      <div class="rtd-shot-progress" id="host-shot-progress" style="display:none;">
+                        <div class="rtd-shot-progress-track"><div class="rtd-shot-progress-fill" id="host-shot-progress-fill"></div></div>
+                        <p class="rtd-shot-progress-label" id="host-shot-progress-label">Reading image…</p>
+                      </div>
+                      <div class="rtd-shot-preview" id="host-shot-preview" style="display:none;">
+                        <img id="host-shot-img" alt="Recruitment screenshot preview" />
+                        <div class="rtd-shot-overlay">
+                          <button type="button" class="rtd-shot-remove" id="host-shot-remove">✕ Remove</button>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="rtd-shot-error" id="host-shot-error" style="display:none;"></p>
+                  </div>
                 </div>
               </div>
 
@@ -308,6 +352,28 @@
                     </div>
                   </div>
                   <button type="button" class="rtd-add-recruit" id="supervise-add-recruit">+ Add another recruit</button>
+                  <div class="rtd-shot" data-shot-group="supervise">
+                    <p class="hint">Add a screenshot as proof of the recruitment (optional, but recommended). Drag &amp; drop, click to browse, or paste an image with Ctrl+V.</p>
+                    <div class="rtd-shot-dropzone" id="supervise-shot-dropzone" tabindex="0" role="button" aria-label="Upload a recruitment screenshot">
+                      <input type="file" id="supervise-shot-input" accept="image/*" class="rtd-shot-file-input" tabindex="-1" />
+                      <div class="rtd-shot-idle" id="supervise-shot-idle">
+                        <svg class="rtd-shot-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4m0 0L7 9m5-5l5 5M5 20h14" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <p><strong>Click to upload</strong>, drag &amp; drop, or paste a screenshot</p>
+                        <p class="rtd-shot-hint-small">PNG or JPG, up to 15MB</p>
+                      </div>
+                      <div class="rtd-shot-progress" id="supervise-shot-progress" style="display:none;">
+                        <div class="rtd-shot-progress-track"><div class="rtd-shot-progress-fill" id="supervise-shot-progress-fill"></div></div>
+                        <p class="rtd-shot-progress-label" id="supervise-shot-progress-label">Reading image…</p>
+                      </div>
+                      <div class="rtd-shot-preview" id="supervise-shot-preview" style="display:none;">
+                        <img id="supervise-shot-img" alt="Recruitment screenshot preview" />
+                        <div class="rtd-shot-overlay">
+                          <button type="button" class="rtd-shot-remove" id="supervise-shot-remove">✕ Remove</button>
+                        </div>
+                      </div>
+                    </div>
+                    <p class="rtd-shot-error" id="supervise-shot-error" style="display:none;"></p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -348,6 +414,15 @@
             <input type="hidden" id="subdivisionName" name="subdivisionName" />
             <input type="hidden" id="formLoadedAt" name="formLoadedAt" />
             <button type="submit" class="btn btn-gold" id="submit-btn">Submit Log</button>
+            <!-- Real upload-progress bar, driven by XMLHttpRequest's
+                 upload.onprogress (see assets/log.js postJsonWithProgress)
+                 -- only shown when a recruitment screenshot is attached,
+                 since that's the only thing in this payload big enough for
+                 upload progress to be meaningful. -->
+            <div class="submit-progress" id="submit-progress" style="display:none;">
+              <div class="submit-progress-track"><div class="submit-progress-fill" id="submit-progress-fill"></div></div>
+              <p class="submit-progress-label" id="submit-progress-label">Uploading…</p>
+            </div>
           </form>
         </div>
       </div>

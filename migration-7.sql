@@ -1,0 +1,22 @@
+-- BCSO Portal — Migration 7 (Cloudflare D1 / SQLite)
+--
+-- SKIP THIS FILE if you're setting up a brand-new database: schema.sql
+-- was updated to already include the is_activity_exempt column below.
+-- Just run schema.sql and you're done. This file is only for a database
+-- set up before that consolidation that hasn't run this migration yet.
+--
+-- Adds rank_options.is_activity_exempt: lets a subdivision's own command
+-- staff mark one of that subdivision's configured ranks (Command Access
+-- -> that subdivision -> Ranks) as exempt from the Activity column on
+-- its public Roster page (roster.html?div=slug) -- members holding an
+-- exempt rank show "Exempt" there instead of an Active / Semi-Active /
+-- Inactive rating computed from this month's Activity Log submissions.
+-- Defaults to 0 (not exempt) for every existing rank option, so nothing
+-- changes until command staff opt a rank in. See functions/api/roster.js
+-- and functions/api/admin/rank-options.js.
+--
+-- Run this once against your D1 database (Cloudflare dashboard ->
+-- Workers & Pages -> your Pages project -> D1 -> your database ->
+-- Console, paste this whole file and execute).
+
+ALTER TABLE rank_options ADD COLUMN is_activity_exempt INTEGER NOT NULL DEFAULT 0;

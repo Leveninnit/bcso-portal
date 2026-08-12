@@ -59,14 +59,70 @@ return `<span class="status-pill ${statusPillClass(status)}">${escapeHtml(status
 // Activity Level pill — computed from THIS MONTH's Activity Log
 // submissions for the person's badge number (see activityLevelFor in
 // functions/api/roster.js), not from Department Status. Reuses the same
-// green/gold/red pill styling as the status pill above.
+// green/gold/red pill styling as the status pill above. "Exempt" means
+// this person's rank was marked exempt from the activity requirement
+// (Command Access -> this subdivision -> Ranks) — it overrides the
+// computed rating entirely, so it gets its own neutral pill style
+// instead of borrowing green/gold/red.
 function activityPillClass(level) {
+if (level === "Exempt") return "status-exempt";
 if (level === "Active") return "status-active";
 if (level === "Semi-Active") return "status-loa";
 return "status-inactive";
 }
 function renderActivityCell(level) {
 return `<span class="status-pill ${activityPillClass(level)}">${escapeHtml(level || "Inactive")}</span>`;
+}
+// Click-to-copy — Badge #, Name, and Discord ID cells only (the three
+// columns someone's most likely to paste elsewhere, e.g. into Discord or
+// a spreadsheet). Cells with nothing to copy (empty Discord ID, a name
+// that couldn't be resolved from the Master Roster) are left inert.
+// `truncate` adds the same fixed-width ellipsis treatment as the Rank
+// cell (see renderTruncatedCell) -- the title attribute carries the full
+// value so it's still readable on hover even when the column's too
+// narrow to show it in full, and clicking still copies the untruncated
+// value regardless of what's visible.
+function copyableCell(value, extraClass, truncate) {
+const safe = escapeHtml(value || "");
+const cls = ["rt-copyable", extraClass, truncate ? "rt-truncate" : ""].filter(Boolean).join(" ");
+if (!value) return `<td class="${cls}">${`<span class="rt-empty">&mdash;</span>`}</td>`;
+const title = truncate ? `${safe} — click to copy` : "Click to copy";
+return `<td class="${cls} rt-copyable-active" data-copy="${safe}" title="${title}">${safe}</td>`;
+}
+// Rank isn't copyable, but with the table now fixed-width (see the
+// roster-table CSS -- this replaced the old overflow-x:auto scrollbar so
+// the roster fits the page without horizontal scrolling), rank names can
+// still be longer than their column. Same ellipsis + title-on-hover
+// treatment as the truncate option above.
+function renderTruncatedCell(value, extraClass) {
+const safe = escapeHtml(value || "");
+const cls = ["rt-truncate", extraClass].filter(Boolean).join(" ");
+if (!value) return `<td class="${cls}"><span class="rt-empty">&mdash;</span></td>`;
+return `<td class="${cls}" title="${safe}">${safe}</td>`;
+}
+function setupCopyableCells(root) {
+root.querySelectorAll(".rt-copyable-active").forEach((cell) => {
+cell.addEventListener("click", async () => {
+const value = cell.dataset.copy;
+if (!value) return;
+try {
+await navigator.clipboard.writeText(value);
+} catch {
+// Clipboard API unavailable/blocked (e.g. no HTTPS context, denied
+// permission) — fail quietly rather than alert-spamming on a click
+// that also runs on ordinary text-selection drags across the cell.
+return;
+}
+clearTimeout(cell._copyTimeout);
+if (cell._copyOriginal === undefined) cell._copyOriginal = cell.innerHTML;
+cell.classList.add("rt-copied");
+cell.textContent = "Copied!";
+cell._copyTimeout = setTimeout(() => {
+cell.innerHTML = cell._copyOriginal;
+cell.classList.remove("rt-copied");
+}, 1100);
+});
+});
 }
 // Same "D1's datetime('now') is UTC without a 'Z'" handling as
 // assets/leaderboards.js's formatDate.
@@ -112,22 +168,37 @@ const rows = entries
 .map(
 (e) => `
 <tr>
-<td class="rt-rank">${e.rank ? escapeHtml(e.rank) : `<span class="rt-empty">&mdash;</span>`}</td>
-<td>${escapeHtml(e.badgeNumber)}</td>
-<td class="rt-name">${e.characterName ? escapeHtml(e.characterName) : `<span class="rt-empty">Not on Master Roster</span>`}</td>
-<td class="rt-discord">${e.discordId ? escapeHtml(e.discordId) : `<span class="rt-empty">&mdash;</span>`}</td>
-<td>${renderStatusCell(e.departmentStatus)}</td>
+${renderTruncatedCell(e.rank, "rt-rank")}
+${copyableCell(e.badgeNumber)}
+${e.characterName ? copyableCell(e.characterName, "rt-name", true) : `<td class="rt-name rt-truncate"><span class="rt-empty">Not on Master Roster</span></td>`}
+${copyableCell(e.discordId, "rt-discord", true)}
+<td class="rt-truncate">${renderStatusCell(e.departmentStatus)}</td>
 <td class="rt-num">${e.hoursLogged || 0}</td>
 <td class="rt-num">${e.activations || 0}</td>
-<td>${renderActivityCell(e.activityLevel)}</td>
+<td class="rt-truncate">${renderActivityCell(e.activityLevel)}</td>
 <td class="rt-notes">${e.notes ? escapeHtml(e.notes) : ""}</td>
 </tr>
 `
 )
 .join("");
+// Fixed-width columns (see .roster-table's table-layout:fixed in
+// style.css) so the whole table always fits the page width instead of
+// needing the horizontal scrollbar the old auto-width table forced on
+// desktop. Percentages sum to 100.
 grid.innerHTML = `
 <div class="roster-table-wrap">
 <table class="roster-table">
+<colgroup>
+<col style="width:12%">
+<col style="width:7%">
+<col style="width:11%">
+<col style="width:13%">
+<col style="width:12%">
+<col style="width:7%">
+<col style="width:9%">
+<col style="width:12%">
+<col style="width:17%">
+</colgroup>
 <thead>
 <tr>
 <th>Rank</th>
@@ -145,6 +216,7 @@ grid.innerHTML = `
 </table>
 </div>
 `;
+setupCopyableCells(grid);
 } catch {
 grid.innerHTML = `<p style="color: var(--muted);">Couldn't load the roster. Try refreshing.</p>`;
 }

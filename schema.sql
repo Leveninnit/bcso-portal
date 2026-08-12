@@ -8,10 +8,11 @@
 --
 -- SETTING UP FRESH: this file is now the complete schema by itself --
 -- every table and column that used to be added later by migration-2.sql
--- and migration-4.sql/migration-5.sql/migration-6.sql is already included
--- below. You do NOT need to also run migration-2/4/5/6 on a brand-new
--- database; just run this file and you're done. (migration-3.sql was
--- never needed at all -- see its own header.)
+-- and migration-4.sql/migration-5.sql/migration-6.sql/migration-7.sql is
+-- already included below. You do NOT need to also run
+-- migration-2/4/5/6/7 on a brand-new database; just run this file and
+-- you're done. (migration-3.sql was never needed at all -- see its own
+-- header.)
 --
 -- UPGRADING AN EXISTING DATABASE that was already set up before this
 -- file was updated to include everything: you've presumably already run
@@ -147,11 +148,19 @@ INSERT OR IGNORE INTO team_roster (slot_number) VALUES (1), (2), (3), (4), (5);
 -- subdivisions that don't set this up. (RTD is unaffected either way —
 -- it already has its own dedicated Rank dropdown wired to the Google
 -- Sheet, kept as-is.)
+--
+-- is_activity_exempt (originally added by migration-7.sql): lets that
+-- subdivision's own command staff mark a rank as exempt from the
+-- Activity column on its public Roster page (roster.html?div=slug) --
+-- members holding an exempt rank show "Exempt" instead of an Active /
+-- Semi-Active / Inactive rating. Toggled from Command Access -> that
+-- subdivision -> Ranks. See functions/api/roster.js.
 CREATE TABLE IF NOT EXISTS rank_options (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   subdivision_slug TEXT NOT NULL,
   label TEXT NOT NULL,
   sort_order INTEGER NOT NULL DEFAULT 0,
+  is_activity_exempt INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

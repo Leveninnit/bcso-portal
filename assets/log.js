@@ -273,6 +273,192 @@
         if (row) row.remove();
       });
       group.nextIndex = undefined;
+      clearRecruitScreenshot(group.key);
+    });
+  }
+
+  // ------------------------------------------------------------------
+  // "Open Recruitment" screenshot upload — an optional proof-of-
+  // recruitment image attached to whichever recruit group (Assist/Host/
+  // Supervise) is submitting. One per group, keyed the same way as
+  // RECRUIT_GROUPS above. Supports click-to-browse, drag & drop, and
+  // pasting an image (Ctrl+V) either while the dropzone itself has focus
+  // or anywhere on the page while a recruit panel is open — see
+  // setupRecruitScreenshots. The file never leaves the browser as-is: it's
+  // downscaled and recompressed through a canvas first (handleScreenshotFile)
+  // so a multi-megabyte phone screenshot still turns into a small, fast
+  // upload, and the progress bar shown during that reflects real
+  // FileReader byte progress for the read step.
+  // ------------------------------------------------------------------
+  const SHOT_MAX_INPUT_BYTES = 15 * 1024 * 1024; // reject absurd files before even trying to read them
+  const SHOT_MAX_DIMENSION = 1600; // longest side after downscaling
+  const SHOT_JPEG_QUALITY = 0.82;
+  const recruitShots = {}; // group.key -> { dataUrl } | undefined
+
+  function shotEl(key, suffix) {
+    return document.getElementById(`${key}-shot-${suffix}`);
+  }
+  function setShotError(key, message) {
+    const el = shotEl(key, "error");
+    if (!el) return;
+    el.textContent = message || "";
+    el.style.display = message ? "" : "none";
+  }
+  function setShotProgress(key, pct, label) {
+    const fill = shotEl(key, "progress-fill");
+    const labelEl = shotEl(key, "progress-label");
+    if (fill) fill.style.width = Math.max(0, Math.min(100, pct)) + "%";
+    if (labelEl && label) labelEl.textContent = label;
+  }
+  function showShotState(key, state) {
+    // state: "idle" | "progress" | "preview"
+    const idle = shotEl(key, "idle");
+    const progress = shotEl(key, "progress");
+    const preview = shotEl(key, "preview");
+    if (idle) idle.style.display = state === "idle" ? "" : "none";
+    if (progress) progress.style.display = state === "progress" ? "" : "none";
+    if (preview) preview.style.display = state === "preview" ? "" : "none";
+  }
+  function clearRecruitScreenshot(key) {
+    delete recruitShots[key];
+    const input = shotEl(key, "input");
+    if (input) input.value = "";
+    setShotError(key, "");
+    showShotState(key, "idle");
+  }
+  function getRecruitScreenshot(key) {
+    return (recruitShots[key] && recruitShots[key].dataUrl) || "";
+  }
+
+  // Reads the file (real byte-progress via FileReader), then downsizes +
+  // recompresses it through a canvas so it's small before it's ever sent
+  // anywhere. Progress: 0-50% is the file read, 50-95% is the image
+  // decode + canvas resize/compress, 95-100% finalizes the preview.
+  function handleScreenshotFile(key, file) {
+    setShotError(key, "");
+    if (!file) return;
+    if (!/^image\//.test(file.type)) {
+      setShotError(key, "Please choose an image file (PNG, JPG, etc.).");
+      return;
+    }
+    if (file.size > SHOT_MAX_INPUT_BYTES) {
+      setShotError(key, "That image is too large (max 15MB). Try a smaller screenshot.");
+      return;
+    }
+    showShotState(key, "progress");
+    setShotProgress(key, 4, "Reading image…");
+    const reader = new FileReader();
+    reader.onprogress = (ev) => {
+      if (ev.lengthComputable) {
+        setShotProgress(key, 4 + (ev.loaded / ev.total) * 46, "Reading image…");
+      }
+    };
+    reader.onerror = () => {
+      setShotError(key, "Couldn't read that image. Please try again.");
+      showShotState(key, "idle");
+    };
+    reader.onload = () => {
+      setShotProgress(key, 55, "Processing image…");
+      const img = new Image();
+      img.onload = () => {
+        try {
+          let { width, height } = img;
+          if (width > SHOT_MAX_DIMENSION || height > SHOT_MAX_DIMENSION) {
+            const scale = SHOT_MAX_DIMENSION / Math.max(width, height);
+            width = Math.round(width * scale);
+            height = Math.round(height * scale);
+          }
+          setShotProgress(key, 78, "Compressing…");
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+          const dataUrl = canvas.toDataURL("image/jpeg", SHOT_JPEG_QUALITY);
+          setShotProgress(key, 97, "Almost done…");
+          recruitShots[key] = { dataUrl };
+          setTimeout(() => {
+            const imgEl = shotEl(key, "img");
+            if (imgEl) imgEl.src = dataUrl;
+            showShotState(key, "preview");
+          }, 150);
+        } catch {
+          setShotError(key, "Couldn't process that image. Please try a different file.");
+          showShotState(key, "idle");
+        }
+      };
+      img.onerror = () => {
+        setShotError(key, "That doesn't look like a valid image. Please try a different file.");
+        showShotState(key, "idle");
+      };
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function pasteImageFromClipboard(ev, key) {
+    const items = (ev.clipboardData && ev.clipboardData.items) || [];
+    for (const item of items) {
+      if (item.kind === "file" && /^image\//.test(item.type)) {
+        const file = item.getAsFile();
+        if (file) {
+          ev.preventDefault();
+          handleScreenshotFile(key, file);
+        }
+        return true;
+      }
+    }
+    return false;
+  }
+
+  function setupRecruitScreenshots() {
+    Object.keys(RECRUIT_GROUPS).forEach((key) => {
+      const dropzone = shotEl(key, "dropzone");
+      const input = shotEl(key, "input");
+      if (!dropzone || !input) return;
+      dropzone.addEventListener("click", () => input.click());
+      dropzone.addEventListener("keydown", (ev) => {
+        if (ev.key === "Enter" || ev.key === " ") {
+          ev.preventDefault();
+          input.click();
+        }
+      });
+      input.addEventListener("change", () => {
+        if (input.files && input.files[0]) handleScreenshotFile(key, input.files[0]);
+      });
+      dropzone.addEventListener("dragover", (ev) => {
+        ev.preventDefault();
+        dropzone.classList.add("rtd-shot-dragover");
+      });
+      dropzone.addEventListener("dragleave", () => {
+        dropzone.classList.remove("rtd-shot-dragover");
+      });
+      dropzone.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        dropzone.classList.remove("rtd-shot-dragover");
+        const file = ev.dataTransfer && ev.dataTransfer.files && ev.dataTransfer.files[0];
+        if (file) handleScreenshotFile(key, file);
+      });
+      dropzone.addEventListener("paste", (ev) => pasteImageFromClipboard(ev, key));
+      const removeBtn = shotEl(key, "remove");
+      if (removeBtn) {
+        removeBtn.addEventListener("click", (ev) => {
+          ev.stopPropagation();
+          clearRecruitScreenshot(key);
+        });
+      }
+    });
+    // Also catch a paste anywhere on the page while a recruit panel is
+    // open, not just when its dropzone happens to have focus -- Ctrl+V
+    // normally "just works" wherever you are, and requiring a click into
+    // a small box first is an easy way to miss the feature entirely.
+    document.addEventListener("paste", (ev) => {
+      if (ev.defaultPrevented) return; // a focused dropzone already handled it above
+      const activeKey = Object.keys(RECRUIT_GROUPS).find((key) => {
+        const el = shotEl(key, "dropzone");
+        return el && el.offsetParent !== null; // visible on screen right now
+      });
+      if (activeKey) pasteImageFromClipboard(ev, activeKey);
     });
   }
 
@@ -330,13 +516,16 @@
       ftoBadge: role === "assist" && !assistIsRecruit ? val("ftoBadge") : "",
       ftoDiscordId: role === "assist" && !assistIsRecruit ? val("ftoDiscordId") : "",
       assistRecruits: assistIsRecruit ? collectRecruitDiscordIds(RECRUIT_GROUPS.assist) : [],
+      assistScreenshot: assistIsRecruit ? getRecruitScreenshot(RECRUIT_GROUPS.assist.key) : "",
       hostType: role === "host" ? val("hostType") : "",
       cadets: role === "host" && !hostIsRecruit ? [1, 2, 3, 4].map(cadet) : [],
       hostRecruits: hostIsRecruit ? collectRecruitDiscordIds(RECRUIT_GROUPS.host) : [],
+      hostScreenshot: hostIsRecruit ? getRecruitScreenshot(RECRUIT_GROUPS.host.key) : "",
       superviseType: role === "supervise" ? val("superviseType") : "",
       supervisedBadge: role === "supervise" && !superviseIsRecruit ? val("supervisedBadge") : "",
       supervisedDiscordId: role === "supervise" && !superviseIsRecruit ? val("supervisedDiscordId") : "",
       superviseRecruits: superviseIsRecruit ? collectRecruitDiscordIds(RECRUIT_GROUPS.supervise) : [],
+      superviseScreenshot: superviseIsRecruit ? getRecruitScreenshot(RECRUIT_GROUPS.supervise.key) : "",
     };
   }
 
@@ -368,6 +557,7 @@
     rankFieldReady = setupRankField(slugValue);
 
     setupRecruitLists();
+    setupRecruitScreenshots();
     setRtdMode(isRtdSlug(slugValue));
     document.getElementById("rtdRole").addEventListener("change", updateRtdBranch);
   }
@@ -528,6 +718,37 @@
     wireBadgeDiscordPair("supervisedBadge", "supervisedDiscordId");
   }
 
+  // XMLHttpRequest instead of fetch specifically so upload.onprogress is
+  // available -- fetch has no cross-browser way to observe request-body
+  // upload progress. Only meaningfully visible when the payload includes
+  // a recruitment screenshot (see handleSubmit's submit-progress bar);
+  // for a plain JSON payload the whole request completes basically
+  // instantly regardless.
+  function postJsonWithProgress(url, payload, onProgress) {
+    return new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", url);
+      xhr.setRequestHeader("Content-Type", "application/json");
+      if (onProgress) {
+        xhr.upload.onprogress = (ev) => {
+          if (ev.lengthComputable) onProgress(ev.loaded / ev.total);
+        };
+      }
+      xhr.onload = () => {
+        let json = {};
+        try {
+          json = JSON.parse(xhr.responseText);
+        } catch {
+          // Non-JSON response body — treat as an empty object, same as
+          // the old fetch path's `.catch(() => ({}))`.
+        }
+        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, json });
+      };
+      xhr.onerror = () => reject(new Error("Network error"));
+      xhr.send(JSON.stringify(payload));
+    });
+  }
+
   async function handleSubmit(e) {
     e.preventDefault();
     const form = document.getElementById("log-form");
@@ -604,14 +825,25 @@
     submitBtn.disabled = true;
     const originalText = submitBtn.textContent;
     submitBtn.innerHTML = '<span class="spinner"></span> Submitting…';
+
+    // Real upload progress is only worth showing when there's actually a
+    // screenshot in the payload — a plain JSON submission is a few KB and
+    // completes before a progress bar could even render meaningfully.
+    const hasScreenshot =
+      rtd && !!(payload.rtd.assistScreenshot || payload.rtd.hostScreenshot || payload.rtd.superviseScreenshot);
+    const submitProgress = document.getElementById("submit-progress");
+    const submitProgressFill = document.getElementById("submit-progress-fill");
+    if (hasScreenshot && submitProgress) {
+      submitProgress.style.display = "";
+      if (submitProgressFill) submitProgressFill.style.width = "0%";
+    }
+
     try {
-      const res = await fetch("/api/log", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const { ok, json: data } = await postJsonWithProgress("/api/log", payload, (fraction) => {
+        if (submitProgressFill) submitProgressFill.style.width = Math.round(fraction * 100) + "%";
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
+      if (submitProgress) submitProgress.style.display = "none";
+      if (!ok) {
         showAlert(errorEl, data.error || "Something went wrong. Please try again.");
         submitBtn.disabled = false;
         submitBtn.textContent = originalText;
@@ -623,6 +855,7 @@
       showAlert(successEl);
       submitBtn.textContent = originalText;
     } catch {
+      if (submitProgress) submitProgress.style.display = "none";
       showAlert(errorEl, "Could not reach the server. Please check your connection and try again.");
       submitBtn.disabled = false;
       submitBtn.textContent = originalText;

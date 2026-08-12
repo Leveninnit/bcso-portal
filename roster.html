@@ -102,9 +102,19 @@ return `<td class="${cls}" title="${safe}">${safe}</td>`;
 }
 function setupCopyableCells(root) {
 root.querySelectorAll(".rt-copyable-active").forEach((cell) => {
-cell.addEventListener("click", async () => {
+cell.addEventListener("click", async (event) => {
 const value = cell.dataset.copy;
 if (!value) return;
+// Easter egg: click the SAME cell 10 times (counted per-cell, so
+// clicking other cells in between doesn't interfere or carry over)
+// and it throws a little BCSO-crest confetti party at the cursor.
+// Counts every click on a cell with a value, not just ones that
+// successfully copy, so it can't get stuck on a clipboard failure.
+cell._copyClickCount = (cell._copyClickCount || 0) + 1;
+if (cell._copyClickCount >= 10) {
+cell._copyClickCount = 0;
+triggerCopyPartyEasterEgg(event.clientX, event.clientY);
+}
 try {
 await navigator.clipboard.writeText(value);
 } catch {
@@ -123,6 +133,177 @@ cell.classList.remove("rt-copied");
 }, 1100);
 });
 });
+}
+
+// ---------------------------------------------------------------------
+// Copy-10-times easter egg: a synthesized party fanfare (Web Audio —
+// no audio file to host/fetch) plus a BCSO-crest confetti explosion
+// (canvas overlay) bursting from the cursor. Self-contained to this
+// page; nothing here is loaded unless someone actually finds it.
+// ---------------------------------------------------------------------
+let _partyAudioCtx = null;
+function getPartyAudioCtx() {
+if (!_partyAudioCtx) {
+const Ctx = window.AudioContext || window.webkitAudioContext;
+if (!Ctx) return null;
+_partyAudioCtx = new Ctx();
+}
+if (_partyAudioCtx.state === "suspended") _partyAudioCtx.resume();
+return _partyAudioCtx;
+}
+function playPartyFanfare() {
+const ctx = getPartyAudioCtx();
+if (!ctx) return;
+const now = ctx.currentTime;
+// A quick bright ascending arpeggio (C5-E5-G5-C6-E6) — the "ta-da".
+const notes = [523.25, 659.25, 783.99, 1046.5, 1318.51];
+notes.forEach((freq, i) => {
+const start = now + i * 0.075;
+const osc = ctx.createOscillator();
+const gain = ctx.createGain();
+osc.type = i % 2 ? "triangle" : "square";
+osc.frequency.setValueAtTime(freq, start);
+gain.gain.setValueAtTime(0, start);
+gain.gain.linearRampToValueAtTime(0.22, start + 0.015);
+gain.gain.exponentialRampToValueAtTime(0.0008, start + 0.4);
+osc.connect(gain).connect(ctx.destination);
+osc.start(start);
+osc.stop(start + 0.42);
+});
+// A final held major chord for a triumphant landing.
+const chordStart = now + notes.length * 0.075 + 0.05;
+[523.25, 659.25, 783.99, 1046.5].forEach((freq) => {
+const osc = ctx.createOscillator();
+const gain = ctx.createGain();
+osc.type = "sawtooth";
+osc.frequency.setValueAtTime(freq, chordStart);
+gain.gain.setValueAtTime(0, chordStart);
+gain.gain.linearRampToValueAtTime(0.12, chordStart + 0.03);
+gain.gain.exponentialRampToValueAtTime(0.0006, chordStart + 0.8);
+const lp = ctx.createBiquadFilter();
+lp.type = "lowpass";
+lp.frequency.value = 3200;
+osc.connect(lp).connect(gain).connect(ctx.destination);
+osc.start(chordStart);
+osc.stop(chordStart + 0.85);
+});
+// A short filtered noise "pop", like a party popper going off.
+const popStart = now;
+const bufferSize = Math.floor(ctx.sampleRate * 0.18);
+const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+const data = buffer.getChannelData(0);
+for (let i = 0; i < bufferSize; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / bufferSize);
+const noise = ctx.createBufferSource();
+noise.buffer = buffer;
+const noiseFilter = ctx.createBiquadFilter();
+noiseFilter.type = "highpass";
+noiseFilter.frequency.value = 1200;
+const noiseGain = ctx.createGain();
+noiseGain.gain.setValueAtTime(0.35, popStart);
+noiseGain.gain.exponentialRampToValueAtTime(0.0006, popStart + 0.18);
+noise.connect(noiseFilter).connect(noiseGain).connect(ctx.destination);
+noise.start(popStart);
+}
+
+let _confettiCanvas = null;
+let _confettiCtx = null;
+let _confettiParticles = [];
+let _confettiRAF = null;
+let _crestImg = null;
+function ensureConfettiCanvas() {
+if (_confettiCanvas) return;
+_confettiCanvas = document.createElement("canvas");
+_confettiCanvas.style.cssText =
+"position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:99999;";
+document.body.appendChild(_confettiCanvas);
+_confettiCtx = _confettiCanvas.getContext("2d");
+const resize = () => {
+const dpr = window.devicePixelRatio || 1;
+_confettiCanvas.width = window.innerWidth * dpr;
+_confettiCanvas.height = window.innerHeight * dpr;
+_confettiCtx.setTransform(dpr, 0, 0, dpr, 0, 0);
+};
+resize();
+window.addEventListener("resize", resize);
+_crestImg = new Image();
+_crestImg.src = "assets/bcso-crest.png";
+}
+const PARTY_COLORS = ["#c9a227", "#e6c65c", "#2c5c3a", "#4caf7d", "#c7cdd1"];
+function burstConfetti(x, y) {
+ensureConfettiCanvas();
+// A quick expanding gold ring flash at the origin, for a satisfying
+// "pop" moment underneath the confetti burst.
+_confettiParticles.push({ type: "ring", x, y, radius: 4, life: 1 });
+const count = 70;
+for (let i = 0; i < count; i++) {
+const angle = Math.random() * Math.PI * 2;
+const speed = 4.5 + Math.random() * 10;
+const isLogo = Math.random() < 0.65;
+_confettiParticles.push({
+type: "piece",
+x,
+y,
+vx: Math.cos(angle) * speed,
+vy: Math.sin(angle) * speed - 4.5, // upward bias so it "explodes" up and out
+rotation: Math.random() * Math.PI * 2,
+vr: (Math.random() - 0.5) * 0.4,
+size: isLogo ? 16 + Math.random() * 16 : 6 + Math.random() * 7,
+isLogo,
+color: PARTY_COLORS[(Math.random() * PARTY_COLORS.length) | 0],
+life: 1,
+decay: 0.007 + Math.random() * 0.011,
+});
+}
+if (!_confettiRAF) _confettiRAF = requestAnimationFrame(stepConfetti);
+}
+function stepConfetti() {
+_confettiCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+_confettiCtx.shadowColor = "rgba(0,0,0,0.4)";
+_confettiCtx.shadowBlur = 5;
+_confettiParticles = _confettiParticles.filter((p) => p.life > 0);
+for (const p of _confettiParticles) {
+if (p.type === "ring") {
+p.radius += 6.5;
+p.life -= 0.045;
+_confettiCtx.save();
+_confettiCtx.shadowBlur = 0;
+_confettiCtx.globalAlpha = Math.max(p.life, 0) * 0.8;
+_confettiCtx.strokeStyle = "#e6c65c";
+_confettiCtx.lineWidth = 3;
+_confettiCtx.beginPath();
+_confettiCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+_confettiCtx.stroke();
+_confettiCtx.restore();
+continue;
+}
+p.vy += 0.2; // gravity
+p.vx *= 0.99; // air drag
+p.x += p.vx;
+p.y += p.vy;
+p.rotation += p.vr;
+p.life -= p.decay;
+_confettiCtx.save();
+_confettiCtx.globalAlpha = Math.max(p.life, 0);
+_confettiCtx.translate(p.x, p.y);
+_confettiCtx.rotate(p.rotation);
+if (p.isLogo && _crestImg && _crestImg.complete && _crestImg.naturalWidth) {
+_confettiCtx.drawImage(_crestImg, -p.size / 2, -p.size / 2, p.size, p.size);
+} else {
+_confettiCtx.fillStyle = p.color;
+_confettiCtx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+}
+_confettiCtx.restore();
+}
+if (_confettiParticles.length) {
+_confettiRAF = requestAnimationFrame(stepConfetti);
+} else {
+_confettiRAF = null;
+_confettiCtx.clearRect(0, 0, window.innerWidth, window.innerHeight);
+}
+}
+function triggerCopyPartyEasterEgg(x, y) {
+playPartyFanfare();
+burstConfetti(x, y);
 }
 // Same "D1's datetime('now') is UTC without a 'Z'" handling as
 // assets/leaderboards.js's formatDate.

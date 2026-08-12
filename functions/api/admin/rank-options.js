@@ -9,10 +9,23 @@
  * way — it already has its own dedicated Rank dropdown wired to the
  * Google Sheet sync, kept as-is.
  *
- * GET    ?div=slug                       -> list options, in order
- * POST   { subdivisionSlug, label }      -> add one
- * PUT    { id, subdivisionSlug, label, sortOrder } -> rename / reorder
- * DELETE ?id=..&div=slug                 -> remove
+ * Each option also carries isActivityExempt: whether members holding
+ * that rank should show "Exempt" instead of an Active / Semi-Active /
+ * Inactive rating on this subdivision's public Roster page. See
+ * functions/api/roster.js, which reads this column, and
+ * assets/command-access.js's Ranks panel, which exposes the toggle.
+ *
+ * GET    ?div=slug                                                   -> list options, in order
+ * POST   { subdivisionSlug, label }                                  -> add one (starts not activity-exempt)
+ * PUT    { id, subdivisionSlug, label, sortOrder, isActivityExempt? } -> rename / reorder / toggle exemption
+ * DELETE ?id=..&div=slug                                             -> remove
+ *
+ * isActivityExempt on PUT is optional: omit it (as the drag-to-reorder
+ * save does) to leave whatever's already stored untouched, or pass a
+ * boolean to set it explicitly -- see the COALESCE in onRequestPut.
+ * Without this, every reorder save would silently reset every rank's
+ * exemption flag back to false, since reorder only ever sends label +
+ * sortOrder.
  *
  * Every write requires a valid Command Access session for that exact
  * subdivision. Requires the D1 database bound as "DB".
@@ -26,7 +39,7 @@ function jsonResponse(body, status) {
   });
 }
 function parseOption(row) {
-  return { id: row.id, label: row.label, sortOrder: row.sort_order };
+  return { id: row.id, label: row.label, sortOrder: row.sort_order, isActivityExempt: !!row.is_activity_exempt };
 }
 
 export async function onRequestGet(context) {
@@ -79,12 +92,18 @@ export async function onRequestPut(context) {
   const session = await requireSession(request, env, body.subdivisionSlug);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
+  // isActivityExempt is optional -- bind null when it's not a boolean so
+  // COALESCE keeps whatever's already stored (see this file's header for
+  // why: the drag-to-reorder save never sends it, and shouldn't silently
+  // clear the flag).
+  const exemptBind = typeof body.isActivityExempt === "boolean" ? (body.isActivityExempt ? 1 : 0) : null;
   const updateResult = await env.DB.prepare(
-    `UPDATE rank_options SET label = ?, sort_order = ? WHERE id = ? AND subdivision_slug = ?`
+    `UPDATE rank_options SET label = ?, sort_order = ?, is_activity_exempt = COALESCE(?, is_activity_exempt) WHERE id = ? AND subdivision_slug = ?`
   )
     .bind(
       body.label.trim().slice(0, 100),
       Number.isFinite(body.sortOrder) ? body.sortOrder : 0,
+      exemptBind,
       body.id,
       body.subdivisionSlug
     )

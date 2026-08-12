@@ -25,6 +25,37 @@
 * {
   box-sizing: border-box;
 }
+
+/* Themed scrollbars — every scrollable element (the page itself, and
+   any overflow:auto panel like .roster-table-wrap or a Command Access
+   list) gets the site's dark green/gold treatment instead of the
+   browser's default light/white scrollbar. Firefox uses
+   scrollbar-width/scrollbar-color; Chrome/Edge/Safari use the
+   ::-webkit-scrollbar pseudo-elements below — both are set so it's
+   consistent across browsers. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gold) var(--bg-alt);
+}
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-track {
+  background: var(--bg-alt);
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--green-bright);
+  border-radius: 999px;
+  border: 2px solid var(--bg-alt);
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--gold);
+}
+*::-webkit-scrollbar-corner {
+  background: var(--bg-alt);
+}
+
 html,
 body {
   margin: 0;
@@ -794,6 +825,11 @@ footer.site-footer a {
    from the Master Roster by badge number (see functions/api/roster.js). */
 
 .roster-table-wrap {
+  /* Fallback only — the table itself is fixed-width and sized to fit
+     its container (see .roster-table below), so this shouldn't trigger
+     on normal desktop widths. It's kept as a safety net for very narrow
+     (phone-width) viewports, where .roster-table's min-width takes over
+     rather than squeezing every column unreadably small. */
   overflow-x: auto;
   margin: 1.5rem 0 2.5rem;
   border: 1px solid var(--panel-border);
@@ -803,21 +839,25 @@ footer.site-footer a {
 
 .roster-table {
   width: 100%;
+  min-width: 700px;
+  table-layout: fixed;
   border-collapse: separate;
   border-spacing: 0;
-  font-size: 0.88rem;
+  font-size: 0.82rem;
 }
 
 .roster-table thead th {
   background: rgba(201, 162, 39, 0.12);
   color: var(--gold-bright);
   text-align: left;
-  padding: 0.65rem 1.1rem;
-  font-size: 0.72rem;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.68rem;
   font-weight: 700;
-  letter-spacing: 0.07em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   border-bottom: 1px solid var(--gold);
   border-right: 1px solid var(--panel-border);
 }
@@ -827,11 +867,23 @@ footer.site-footer a {
 }
 
 .roster-table tbody td {
-  padding: 0.6rem 1.1rem;
+  padding: 0.5rem 0.7rem;
   border-bottom: 1px solid var(--panel-border);
   border-right: 1px solid var(--panel-border);
   color: var(--text);
+  overflow: hidden;
+}
+
+/* Rank, Name, Discord ID, Department Status, and Activity are all
+   fixed-width columns now (see .roster-table's table-layout:fixed) —
+   this keeps each to a single ellipsized line instead of forcing the
+   column wider than its share of the table. The full value is always
+   available on hover via the cell's title attribute (see
+   renderTruncatedCell/copyableCell in roster.html), and for the
+   copyable columns, clicking still copies the untruncated value. */
+.roster-table td.rt-truncate {
   white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .roster-table tbody td:last-child {
@@ -867,7 +919,25 @@ footer.site-footer a {
 .roster-table td.rt-discord {
   color: var(--silver-dim);
   font-family: monospace;
-  font-size: 0.82rem;
+  font-size: 0.74rem;
+}
+
+/* Click-to-copy — Badge #, Name, and Discord ID cells only (see
+   copyableCell/setupCopyableCells in roster.html). Only cells that
+   actually have a value get the pointer/hover treatment; empty ones
+   render as plain rt-empty text with no click behavior. */
+.roster-table td.rt-copyable-active {
+  cursor: pointer;
+}
+.roster-table td.rt-copyable-active:hover {
+  color: var(--gold-bright);
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+.roster-table td.rt-copyable-active.rt-copied {
+  color: var(--gold-bright);
+  font-style: italic;
+  text-decoration: none;
 }
 
 .roster-table td.rt-empty {
@@ -878,9 +948,9 @@ footer.site-footer a {
 
 .roster-table td.rt-notes {
   white-space: normal;
+  word-wrap: break-word;
   color: var(--silver-dim);
   font-style: italic;
-  min-width: 160px;
 }
 
 /* Hours / Activations — computed from that subdivision's Activity Log
@@ -900,13 +970,17 @@ footer.site-footer a {
    functions/api/roster.js. */
 .status-pill {
   display: inline-block;
-  padding: 0.15rem 0.65rem;
+  max-width: 100%;
+  padding: 0.15rem 0.55rem;
   border-radius: 999px;
-  font-size: 0.76rem;
+  font-size: 0.72rem;
   font-weight: 700;
-  letter-spacing: 0.03em;
+  letter-spacing: 0.02em;
   border: 1px solid;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
 }
 
 .status-active {
@@ -931,6 +1005,16 @@ footer.site-footer a {
   color: var(--muted);
   border-color: var(--panel-border);
   background: rgba(255, 255, 255, 0.03);
+}
+
+/* Activity column only: a rank marked exempt (Command Access -> a
+   subdivision -> Ranks) shows this instead of a computed Active /
+   Semi-Active / Inactive rating — neutral silver rather than
+   green/gold/red so it doesn't read as a performance rating. */
+.status-exempt {
+  color: var(--silver);
+  border-color: var(--silver-dim);
+  background: rgba(199, 205, 209, 0.1);
 }
 
 /* ---------- Ranks page (ranks.html) ----------

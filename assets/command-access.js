@@ -385,10 +385,12 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     const rtdNote =
       "RTD's Activity Log rank dropdown starts out with 4 built-in options (RTD Assistant Field Trainer, RTD Field Trainer, RTD Operation lead, RTD Board of Directors +) that match the Master Roster sheet's Activation Log formulas. Add ranks here to replace that built-in list on RTD's Activity Log and Roster forms — if you do, make sure the wording still matches whatever the sheet's formulas expect (or update the sheet to match), since those formulas key off the exact rank text. Leave this empty to keep the built-in RTD list.";
     const otherNote = `Add the ranks deputies can pick from on ${subInfo(activeSlug).short}'s Activity Log and Roster forms. Order matters: drag rows to arrange these highest to lowest — it saves as soon as you drop, and this order is used to sort ${subInfo(activeSlug).short}'s Roster and controls what shows up in both Rank dropdowns. Leave this empty to keep the original free-text Rank fields (and manual Roster order).`;
+    const exemptNote = `Tick "Exempt from activity" on a rank to show "Exempt" instead of an Active / Semi-Active / Inactive rating for anyone on ${subInfo(activeSlug).short}'s Roster holding that rank — for ranks that aren't held to the usual activity requirement.`;
     panel.innerHTML = `
       <div class="panel">
         <p class="ca-section-title">Rank Options</p>
         <p class="ca-muted">${activeSlug === "rtd" ? rtdNote : otherNote}</p>
+        <p class="ca-muted">${exemptNote}</p>
         <div id="ca-rank-list">Loading…</div>
         <div class="ca-question-form" id="ca-add-rank-form"></div>
       </div>
@@ -421,6 +423,10 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
               <div><strong>${escapeHtml(o.label)}</strong></div>
             </div>
             <div class="ca-actions">
+              <label class="ca-exempt-toggle">
+                <input type="checkbox" data-rkexempt="${o.id}" ${o.isActivityExempt ? "checked" : ""} />
+                Exempt from activity
+              </label>
               <button class="ca-btn-reject" data-rkaction="delete" data-rkid="${o.id}">Delete</button>
             </div>
           </div>
@@ -430,9 +436,43 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       list.querySelectorAll("[data-rkaction]").forEach((btn) => {
         btn.addEventListener("click", () => handleRankAction(btn.dataset.rkaction, options, btn.dataset.rkid));
       });
+      list.querySelectorAll("[data-rkexempt]").forEach((cb) => {
+        cb.addEventListener("change", () => handleRankExemptToggle(cb, options, cb.dataset.rkexempt));
+      });
       setupRankDragReorder(list, options);
     } catch {
       list.innerHTML = `<p class="ca-muted">Couldn't load rank options. Try refreshing.</p>`;
+    }
+  }
+
+  // Toggling a rank's "Exempt from activity" checkbox saves immediately
+  // (matching the rest of this panel's drag-to-reorder-saves-on-drop
+  // pattern) rather than needing a separate Save button. On failure, the
+  // checkbox reverts to its prior state so the UI never shows a checked
+  // state that didn't actually persist.
+  async function handleRankExemptToggle(checkbox, options, id) {
+    const o = options.find((x) => String(x.id) === String(id));
+    if (!o) return;
+    checkbox.disabled = true;
+    try {
+      const res = await fetch("/api/admin/rank-options", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: o.id,
+          subdivisionSlug: activeSlug,
+          label: o.label,
+          sortOrder: o.sortOrder,
+          isActivityExempt: checkbox.checked,
+        }),
+      });
+      if (!res.ok) throw new Error("request failed");
+      o.isActivityExempt = checkbox.checked;
+    } catch {
+      checkbox.checked = !checkbox.checked;
+      alert("Couldn't update that rank. Please try again.");
+    } finally {
+      checkbox.disabled = false;
     }
   }
 

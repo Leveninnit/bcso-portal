@@ -220,6 +220,24 @@
 .ca-btn-reject { background: #7a2c2c; color: #fceaea; }
 .ca-btn-delete { background: rgba(255, 255, 255, 0.1); color: #eee; }
 
+/* Ranks panel — "Exempt from activity" checkbox on each rank row (see
+   assets/command-access.js's renderRanksPanel/handleRankExemptToggle). */
+.ca-exempt-toggle {
+     display: inline-flex;
+     align-items: center;
+     gap: 0.4rem;
+     font-size: 0.82rem;
+     color: rgba(255, 255, 255, 0.7);
+     cursor: pointer;
+     user-select: none;
+}
+.ca-exempt-toggle input[type="checkbox"] {
+     width: 15px;
+     height: 15px;
+     accent-color: #c9a227;
+     cursor: pointer;
+}
+
 .ca-question-row {
      border: 1px solid rgba(255, 255, 255, 0.1);
      border-radius: 8px;

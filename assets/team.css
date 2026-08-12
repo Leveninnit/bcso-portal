@@ -5,10 +5,15 @@
   min-height: 1.2rem;
 }
 
+/* Always exactly 5 High Command slots (see assets/team.js) -- a fixed
+   5-column grid keeps them on one line on normal desktop widths instead
+   of auto-fit wrapping the 5th card onto its own row. Narrower
+   breakpoints below step the column count down so cards don't get
+   squeezed unreadably thin on tablets/phones. */
 .team-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1.1rem;
   margin-top: 1.5rem;
 }
 
@@ -16,7 +21,7 @@
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid var(--panel-border);
   border-radius: 14px;
-  padding: 1.75rem 1.25rem 1.5rem;
+  padding: 1.6rem 0.9rem 1.4rem;
   text-align: center;
   display: flex;
   flex-direction: column;
@@ -115,6 +120,18 @@
   color: var(--muted);
   font-weight: 600;
   font-size: 1rem;
+}
+
+@media (max-width: 900px) {
+  .team-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .team-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
 }
 
 @media (max-width: 480px) {

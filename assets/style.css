@@ -192,7 +192,10 @@ nav.main-nav a.active {
   margin: 1.25rem auto 0;
   color: var(--silver);
 }
-.hero .cta-row {
+/* Unscoped (not just .hero) so every .cta-row on the site -- e.g. the
+   "Ready to Join a Subdivision?" section's single Browse Subdivisions
+   button -- centers the same way instead of sitting left-aligned. */
+.cta-row {
   margin-top: 1.75rem;
   display: flex;
   justify-content: center;
@@ -798,37 +801,6 @@ footer.site-footer a {
   align-items: center;
   gap: 0.4rem;
   margin-top: -0.4rem;
-}
-
-/* ---------- Stat bar (homepage) ---------- */
-
-.stat-bar {
-  padding: 1.75rem 0;
-  border-bottom: 1px solid var(--panel-border);
-  background: rgba(255, 255, 255, 0.015);
-}
-
-.stat-bar-inner {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-  gap: 1rem;
-  text-align: center;
-}
-
-.stat strong {
-  display: block;
-  color: var(--gold-bright);
-  font-size: 1.6rem;
-  letter-spacing: 0.02em;
-}
-
-.stat span {
-  display: block;
-  color: var(--muted);
-  font-size: 0.78rem;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  margin-top: 0.2rem;
 }
 
 /* ---------- Deputy of the Week/Month honor cards (homepage) ---------- */

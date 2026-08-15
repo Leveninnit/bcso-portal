@@ -71,12 +71,42 @@ export async function onRequestGet(context) {
     .slice(1)
     .map((row) => cadetFromRow(cadetTable, row))
     // Skip empty placeholder rows (no badge and no name -- e.g. unused
-    // CADET-## slots reserved for future use) and anyone not currently
-    // ranked Cadet.
-    .filter((c) => (c.badgeNumber || c.name) && normalizeRankLabel(c.rank) === CADET_RANK_LABEL);
+    // CADET-## slots reserved for future use). The Rank check is
+    // deliberately lenient -- a blank Rank cell still counts as a
+    // cadet (this whole tab is dedicated to cadets, so command staff
+    // may not bother filling in a per-row Rank at all), and a filled
+    // cell only has to *contain* "cadet" rather than match it exactly,
+    // so values like "Cadet I" or "RTD Cadet" still count. A row is
+    // only excluded here if Rank is explicitly filled in with
+    // something else entirely (e.g. someone already promoted out but
+    // not yet removed from the tab).
+    .filter((c) => {
+      if (!c.badgeNumber && !c.name) return false;
+      const rank = normalizeRankLabel(c.rank);
+      return !rank || rank.includes(CADET_RANK_LABEL);
+    });
 
   if (!cadets.length) {
-    return jsonResponse({ entries: [], limitDays: CADET_RESIDENCY_LIMIT_DAYS }, 200);
+    return jsonResponse(
+      {
+        entries: [],
+        limitDays: CADET_RESIDENCY_LIMIT_DAYS,
+        debug: {
+          rawRowCount: cadetTable.rows.length,
+          headerIdx: cadetTable.headerIdx,
+          header: cadetTable.header,
+          columnsFound: {
+            callsign: cadetTable.idxCallsign,
+            badge: cadetTable.idxBadge,
+            name: cadetTable.idxName,
+            rank: cadetTable.idxRank,
+            hireDate: cadetTable.idxHireDate,
+            days: cadetTable.idxDays,
+          },
+        },
+      },
+      200
+    );
   }
 
   // Discord ID isn't on the Cadet Roster tab -- resolved live from the

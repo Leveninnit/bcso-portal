@@ -388,14 +388,37 @@ export async function fetchCadetRosterTable(env, { debug = false } = {}) {
   const gid = env.CADET_ROSTER_GID || DEFAULT_CADET_ROSTER_GID;
   const tabName = await resolveTabNameByGid(sheetId, apiKey, gid);
   if (!tabName) {
-    return debug ? { rows: null, debug: "could not resolve Cadet Roster tab name from gid", gid } : null;
+    // debug mode also lists every tab this API key/spreadsheet ID combo
+    // can actually see, with its gid -- the fastest way to tell "wrong
+    // ROSTER_SHEET_ID" apart from "gid doesn't exist on this sheet" or
+    // "sharing/permissions problem" without guessing.
+    const allTabs = debug ? await listAllTabs(sheetId, apiKey) : null;
+    return debug ? { rows: null, debug: "could not resolve Cadet Roster tab name from gid", gid, sheetId, allTabs } : null;
   }
   const raw = await fetchRowsViaSheetsApi(sheetId, apiKey, tabName);
-  if (!raw.rows) return debug ? raw : null;
+  if (!raw.rows) return debug ? { ...raw, resolvedTabName: tabName, gid, sheetId } : null;
   const result = cadetTableFromRows(raw.rows, raw.fetchStatus, raw.source);
-  if (!result.rows) return debug ? result : null;
+  result.resolvedTabName = tabName;
+  result.gid = gid;
+  if (!result.rows) return debug ? { ...result, sheetId } : null;
   if (!debug) cadetTableCache = { result, at: Date.now() };
   return result;
+}
+
+// Debug-only: lists every tab's title + gid for a spreadsheet, so a
+// gid-resolution failure (or a resolution to unexpected data) can be
+// diagnosed as "wrong ROSTER_SHEET_ID" vs. "wrong gid" vs. something
+// else, instead of guessing blind.
+async function listAllTabs(sheetId, apiKey) {
+  const url = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?key=${apiKey}&fields=${encodeURIComponent("sheets.properties")}`;
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return { error: `metadata fetch failed (${res.status})` };
+    const data = await res.json();
+    return (data.sheets || []).map((s) => ({ title: s.properties?.title, gid: s.properties?.sheetId }));
+  } catch (e) {
+    return { error: String(e) };
+  }
 }
 
 // Maps one Cadet Roster row into a plain object. daysInPosition is

@@ -871,14 +871,18 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   }
 
   // ---------------------------------------------------------------------
-  // Cadet Residency (RTD only) — every Roster entry (see Roster panel
-  // above) currently ranked "Cadet", how many days they've held that
-  // rank (roster_entries.rank_since, see functions/api/admin/roster.js
-  // and functions/api/admin/cadet-residency.js), and a flag for anyone
-  // over the 14-day residency limit. Discord ID is resolved live from
-  // the Master Roster same as the Roster panel, and is click-to-copy.
-  // Removing someone here reuses the Roster tab's own DELETE endpoint —
-  // a Cadet Residency entry IS a Roster entry, just filtered by rank.
+  // Cadet Residency (RTD only) — every row on the Master Roster Google
+  // Sheet's "Cadet Roster" tab currently ranked "Cadet", how many days
+  // they've held that rank (read straight from the sheet's own "Days in
+  // Position" column — see functions/api/admin/cadet-residency.js and
+  // functions/_lib/roster-sheet.js), and a flag for anyone at/over the
+  // residency limit. This is a completely separate list from this
+  // subdivision's own Roster tab above — NOT filtered from it. Discord
+  // ID is resolved live from the Master Roster's Employee Database tab
+  // by badge number, and is click-to-copy. Display-only: this codebase
+  // has no write access to the Google Sheet, so there's no Remove
+  // action here — command staff remove an overstayed cadet by editing
+  // the sheet directly.
   // ---------------------------------------------------------------------
   async function renderCadetResidencyPanel() {
     const panel = el("ca-panel");
@@ -911,7 +915,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   }
 
   function renderCadetResidencyContent(panel, entries, limitDays) {
-    const desc = `Everyone on the ${subInfo(activeSlug).short} Roster currently ranked "Cadet" (set from the Roster tab), and how many days they've held that rank. Anyone over ${limitDays} days is flagged as needing to be removed for overstaying their residency period. Character Name and Discord ID are pulled automatically from the Master Roster, same as the Roster tab — click a Discord ID to copy it.`;
+    const desc = `Everyone on the Master Roster's Cadet Roster tab currently ranked "Cadet", and how many days they've held that rank (pulled straight from the sheet). Anyone at ${limitDays} days or more is flagged as needing to be removed for overstaying their residency period. Discord ID is resolved automatically from the Master Roster by badge number — click one to copy it. This list is read-only here; removals are made directly on the sheet.`;
     panel.innerHTML = `
       <div class="panel">
         <p class="ca-section-title">${subInfo(activeSlug).short} Cadet Residency</p>
@@ -921,33 +925,28 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     `;
     const list = el("ca-cadet-residency-list");
     if (!entries.length) {
-      list.innerHTML = `<p class="ca-muted">No one is currently ranked "Cadet" on the ${subInfo(activeSlug).short} Roster.</p>`;
+      list.innerHTML = `<p class="ca-muted">No one is currently ranked "Cadet" on the Cadet Roster sheet.</p>`;
       return;
     }
     list.innerHTML = entries.map((e) => renderCadetResidencyRow(e)).join("");
     setupCadetResidencyCopy(list);
-    list.querySelectorAll("[data-cr-remove]").forEach((btn) => {
-      btn.addEventListener("click", () => handleCadetResidencyRemove(btn.dataset.crRemove, btn.dataset.crName));
-    });
   }
 
   function renderCadetResidencyRow(e) {
     const badge = escapeHtml(e.badgeNumber || "");
+    const callsign = e.callsign ? `${escapeHtml(e.callsign)} &middot; ` : "";
     const name = e.characterName ? escapeHtml(e.characterName) : "(not on Master Roster)";
     const discordHtml = e.discordId
       ? `<span class="ca-cr-copyable" data-copy="${escapeHtml(e.discordId)}" title="Click to copy">${escapeHtml(e.discordId)}</span>`
       : `<span class="ca-cr-empty">&mdash;</span>`;
     const days = e.daysInPosition;
-    const dayLabel = `${days} day${days === 1 ? "" : "s"} in Cadet`;
+    const dayLabel = days === null ? "days in Cadet unknown" : `${days} day${days === 1 ? "" : "s"} in Cadet`;
     return `
-      <div class="ca-question-row ca-cr-row${e.overstayed ? " ca-cr-row-overstayed" : ""}" data-entry-id="${e.id}">
+      <div class="ca-question-row ca-cr-row${e.overstayed ? " ca-cr-row-overstayed" : ""}">
         <div>
-          <strong>${name}</strong> &middot; Badge ${badge}
+          <strong>${callsign}${name}</strong> &middot; Badge ${badge}
           <div class="ca-question-meta">${discordHtml} &middot; ${dayLabel}</div>
           ${e.overstayed ? `<div class="ca-cr-flag">Needs to be removed — overstayed residency</div>` : ""}
-        </div>
-        <div class="ca-actions">
-          <button class="ca-btn-reject" data-cr-remove="${e.id}" data-cr-name="${escapeHtml(e.characterName || `Badge ${badge}`)}">Remove</button>
         </div>
       </div>
     `;
@@ -973,21 +972,6 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         }, 1100);
       });
     });
-  }
-
-  async function handleCadetResidencyRemove(id, name) {
-    if (!confirm(`Remove ${name} from the ${subInfo(activeSlug).short} Roster? They'd need to be re-added from the Roster tab if this was a mistake.`)) return;
-    try {
-      const res = await fetch(`/api/admin/roster?id=${encodeURIComponent(id)}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        alert(data.error || "Couldn't remove them. Please try again.");
-        return;
-      }
-      renderCadetResidencyPanel();
-    } catch {
-      alert("Couldn't remove them. Please try again.");
-    }
   }
 
   // ---------------------------------------------------------------------

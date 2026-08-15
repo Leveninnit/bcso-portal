@@ -329,6 +329,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         <button type="button" class="ca-inner-tab-btn" data-tab="customize">Customize Questions</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="ranks">Ranks</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="roster">Roster</button>
+        ${activeSlug === "rtd" ? `<button type="button" class="ca-inner-tab-btn" data-tab="cadet-residency">Cadet Residency</button>` : ""}
         <button type="button" class="ca-inner-tab-btn" data-tab="documents">Documents</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="sop">SOP</button>
         <button type="button" class="ca-inner-tab-btn" data-tab="movements">Movement Templates</button>
@@ -361,6 +362,8 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       renderRanksPanel();
     } else if (activeInnerTab === "roster") {
       renderRosterPanel();
+    } else if (activeInnerTab === "cadet-residency") {
+      renderCadetResidencyPanel();
     } else if (activeInnerTab === "sop") {
       renderSubdivisionSopPanel();
     } else if (activeInnerTab === "movements") {
@@ -865,6 +868,126 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         statusEl.textContent = "Failed to save. Check your connection.";
       }
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Cadet Residency (RTD only) — every Roster entry (see Roster panel
+  // above) currently ranked "Cadet", how many days they've held that
+  // rank (roster_entries.rank_since, see functions/api/admin/roster.js
+  // and functions/api/admin/cadet-residency.js), and a flag for anyone
+  // over the 14-day residency limit. Discord ID is resolved live from
+  // the Master Roster same as the Roster panel, and is click-to-copy.
+  // Removing someone here reuses the Roster tab's own DELETE endpoint —
+  // a Cadet Residency entry IS a Roster entry, just filtered by rank.
+  // ---------------------------------------------------------------------
+  async function renderCadetResidencyPanel() {
+    const panel = el("ca-panel");
+    panel.innerHTML = `
+      <div class="panel">
+        <p class="ca-section-title">${subInfo(activeSlug).short} Cadet Residency</p>
+        <p class="ca-muted">Loading…</p>
+      </div>
+    `;
+    try {
+      const res = await fetch(`/api/admin/cadet-residency?div=${encodeURIComponent(activeSlug)}`, { cache: "no-store" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        renderCadetResidencyError(panel, data.error || "Couldn't load Cadet Residency.");
+        return;
+      }
+      renderCadetResidencyContent(panel, data.entries || [], data.limitDays || 14);
+    } catch {
+      renderCadetResidencyError(panel, "Couldn't load Cadet Residency. Try refreshing.");
+    }
+  }
+
+  function renderCadetResidencyError(panel, message) {
+    panel.innerHTML = `
+      <div class="panel">
+        <p class="ca-section-title">${subInfo(activeSlug).short} Cadet Residency</p>
+        <p class="ca-muted">${escapeHtml(message)}</p>
+      </div>
+    `;
+  }
+
+  function renderCadetResidencyContent(panel, entries, limitDays) {
+    const desc = `Everyone on the ${subInfo(activeSlug).short} Roster currently ranked "Cadet" (set from the Roster tab), and how many days they've held that rank. Anyone over ${limitDays} days is flagged as needing to be removed for overstaying their residency period. Character Name and Discord ID are pulled automatically from the Master Roster, same as the Roster tab — click a Discord ID to copy it.`;
+    panel.innerHTML = `
+      <div class="panel">
+        <p class="ca-section-title">${subInfo(activeSlug).short} Cadet Residency</p>
+        <p class="ca-muted">${desc}</p>
+        <div id="ca-cadet-residency-list"></div>
+      </div>
+    `;
+    const list = el("ca-cadet-residency-list");
+    if (!entries.length) {
+      list.innerHTML = `<p class="ca-muted">No one is currently ranked "Cadet" on the ${subInfo(activeSlug).short} Roster.</p>`;
+      return;
+    }
+    list.innerHTML = entries.map((e) => renderCadetResidencyRow(e)).join("");
+    setupCadetResidencyCopy(list);
+    list.querySelectorAll("[data-cr-remove]").forEach((btn) => {
+      btn.addEventListener("click", () => handleCadetResidencyRemove(btn.dataset.crRemove, btn.dataset.crName));
+    });
+  }
+
+  function renderCadetResidencyRow(e) {
+    const badge = escapeHtml(e.badgeNumber || "");
+    const name = e.characterName ? escapeHtml(e.characterName) : "(not on Master Roster)";
+    const discordHtml = e.discordId
+      ? `<span class="ca-cr-copyable" data-copy="${escapeHtml(e.discordId)}" title="Click to copy">${escapeHtml(e.discordId)}</span>`
+      : `<span class="ca-cr-empty">&mdash;</span>`;
+    const days = e.daysInPosition;
+    const dayLabel = `${days} day${days === 1 ? "" : "s"} in Cadet`;
+    return `
+      <div class="ca-question-row ca-cr-row${e.overstayed ? " ca-cr-row-overstayed" : ""}" data-entry-id="${e.id}">
+        <div>
+          <strong>${name}</strong> &middot; Badge ${badge}
+          <div class="ca-question-meta">${discordHtml} &middot; ${dayLabel}</div>
+          ${e.overstayed ? `<div class="ca-cr-flag">Needs to be removed — overstayed residency</div>` : ""}
+        </div>
+        <div class="ca-actions">
+          <button class="ca-btn-reject" data-cr-remove="${e.id}" data-cr-name="${escapeHtml(e.characterName || `Badge ${badge}`)}">Remove</button>
+        </div>
+      </div>
+    `;
+  }
+
+  function setupCadetResidencyCopy(root) {
+    root.querySelectorAll(".ca-cr-copyable").forEach((cell) => {
+      cell.addEventListener("click", async () => {
+        const value = cell.dataset.copy;
+        if (!value) return;
+        try {
+          await navigator.clipboard.writeText(value);
+        } catch {
+          return;
+        }
+        clearTimeout(cell._crCopyTimeout);
+        if (cell._crCopyOriginal === undefined) cell._crCopyOriginal = cell.textContent;
+        cell.textContent = "Copied!";
+        cell.classList.add("ca-cr-copied");
+        cell._crCopyTimeout = setTimeout(() => {
+          cell.textContent = cell._crCopyOriginal;
+          cell.classList.remove("ca-cr-copied");
+        }, 1100);
+      });
+    });
+  }
+
+  async function handleCadetResidencyRemove(id, name) {
+    if (!confirm(`Remove ${name} from the ${subInfo(activeSlug).short} Roster? They'd need to be re-added from the Roster tab if this was a mistake.`)) return;
+    try {
+      const res = await fetch(`/api/admin/roster?id=${encodeURIComponent(id)}&div=${encodeURIComponent(activeSlug)}`, { method: "DELETE" });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        alert(data.error || "Couldn't remove them. Please try again.");
+        return;
+      }
+      renderCadetResidencyPanel();
+    } catch {
+      alert("Couldn't remove them. Please try again.");
+    }
   }
 
   // ---------------------------------------------------------------------

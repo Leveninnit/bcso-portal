@@ -297,6 +297,44 @@
      font-size: 0.8rem;
 }
 
+/* Cadet Residency (RTD only, see assets/command-access.js's
+   renderCadetResidencyPanel). Rows reuse .ca-question-row's look --
+   .ca-cr-row-overstayed adds a red left border so anyone over the
+   14-day limit stands out immediately without reading every row. */
+.ca-cr-row-overstayed {
+     border-color: rgba(178, 58, 58, 0.55);
+     background: rgba(178, 58, 58, 0.08);
+}
+.ca-cr-flag {
+     margin-top: 0.35rem;
+     display: inline-block;
+     color: #ff9b9b;
+     background: rgba(178, 58, 58, 0.18);
+     border: 1px solid rgba(178, 58, 58, 0.5);
+     border-radius: 999px;
+     padding: 0.15rem 0.7rem;
+     font-size: 0.75rem;
+     font-weight: 700;
+     letter-spacing: 0.02em;
+}
+.ca-cr-copyable {
+     cursor: pointer;
+     border-bottom: 1px dotted rgba(255, 255, 255, 0.35);
+}
+.ca-cr-copyable:hover {
+     color: var(--gold-bright, #c9a227);
+     border-bottom-color: var(--gold-bright, #c9a227);
+}
+.ca-cr-copyable.ca-cr-copied {
+     color: var(--gold-bright, #c9a227);
+     font-style: italic;
+     border-bottom-color: transparent;
+}
+.ca-cr-empty {
+     color: rgba(255, 255, 255, 0.4);
+     font-style: italic;
+}
+
 .ca-question-form {
      border: 1px dashed rgba(201, 162, 39, 0.4);
      border-radius: 8px;

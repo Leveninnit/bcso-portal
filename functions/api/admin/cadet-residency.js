@@ -61,7 +61,9 @@ export async function onRequestGet(context) {
     return jsonResponse(
       {
         error: "Couldn't read the Cadet Roster sheet right now. Make sure GOOGLE_SHEETS_API_KEY and ROSTER_SHEET_ID are configured.",
-        debug: cadetTable ? cadetTable.debug : "fetchCadetRosterTable returned null",
+        debug: cadetTable
+          ? { message: cadetTable.debug, gid: cadetTable.gid, sheetId: cadetTable.sheetId, allTabs: cadetTable.allTabs }
+          : "fetchCadetRosterTable returned null",
       },
       502
     );
@@ -92,6 +94,8 @@ export async function onRequestGet(context) {
         entries: [],
         limitDays: CADET_RESIDENCY_LIMIT_DAYS,
         debug: {
+          resolvedTabName: cadetTable.resolvedTabName,
+          gid: cadetTable.gid,
           rawRowCount: cadetTable.rows.length,
           headerIdx: cadetTable.headerIdx,
           header: cadetTable.header,

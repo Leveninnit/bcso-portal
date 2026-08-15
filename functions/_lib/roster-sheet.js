@@ -152,6 +152,26 @@ function findColumn(header, ...candidates) {
   return -1;
 }
 
+// Google Sheets tabs often have a title/banner row (a merged "RTD CADET
+// ROSTER" cell, a spacer row, etc.) sitting above the actual column
+// header row -- tableFromRows/cadetTableFromRows used to always assume
+// rows[0] was the header, which silently produced a table with every
+// column index === -1 (and therefore zero usable data) whenever that
+// assumption didn't hold. This scans the first few rows for the one
+// that actually looks like a header -- containing at least two of the
+// expected column-name keywords -- and returns its index so callers can
+// skip anything above it. Falls back to 0 (old behavior) if nothing
+// looks like a header within the scan window, so a tab that genuinely
+// starts with its header row is unaffected.
+function locateHeaderRow(rows, keywords, maxScan = 5) {
+  for (let i = 0; i < Math.min(maxScan, rows.length); i++) {
+    const cells = (rows[i] || []).map((c) => (c || "").toString().trim().toLowerCase());
+    const matches = keywords.filter((k) => cells.some((c) => c === k || c.includes(k))).length;
+    if (matches >= 2) return i;
+  }
+  return 0;
+}
+
 // ---- Raw row fetchers (no column-mapping) ------------------------------
 //
 // These just get { rows, fetchStatus, source, debug?, error?, body? } for
@@ -201,8 +221,10 @@ async function fetchRowsViaCsvExport(sheetId, gid) {
 
 // ---- Employee Database tab (existing behavior, unchanged) --------------
 
-function tableFromRows(rows, fetchStatus, source) {
-  if (!rows.length) return { rows: null, debug: "no rows parsed", fetchStatus, source };
+function tableFromRows(rawRows, fetchStatus, source) {
+  if (!rawRows.length) return { rows: null, debug: "no rows parsed", fetchStatus, source };
+  const headerIdx = locateHeaderRow(rawRows, ["discord", "badge", "name", "rank", "status"]);
+  const rows = rawRows.slice(headerIdx);
   const header = rows[0].map((h) => (h || "").trim().toLowerCase());
   const idxDiscordId = findColumn(header, "discord id", "discord");
   const idxName = findColumn(header, "name");
@@ -212,7 +234,7 @@ function tableFromRows(rows, fetchStatus, source) {
   // on the public Roster next to each member, resolved by badge number
   // exactly like Name and Discord ID, never typed in by command staff.
   const idxDeptStatus = findColumn(header, "status");
-  return { rows, header, idxDiscordId, idxName, idxBadge, idxRank, idxDeptStatus, fetchStatus, debug: "ok", source };
+  return { rows, header, headerIdx, idxDiscordId, idxName, idxBadge, idxRank, idxDeptStatus, fetchStatus, debug: "ok", source };
 }
 
 async function fetchViaSheetsApi(sheetId, apiKey, tabName) {
@@ -333,8 +355,10 @@ async function resolveTabNameByGid(sheetId, apiKey, gid) {
   }
 }
 
-function cadetTableFromRows(rows, fetchStatus, source) {
-  if (!rows.length) return { rows: null, debug: "no rows parsed", fetchStatus, source };
+function cadetTableFromRows(rawRows, fetchStatus, source) {
+  if (!rawRows.length) return { rows: null, debug: "no rows parsed", fetchStatus, source };
+  const headerIdx = locateHeaderRow(rawRows, ["callsign", "badge", "name", "rank", "days"]);
+  const rows = rawRows.slice(headerIdx);
   const header = rows[0].map((h) => (h || "").trim().toLowerCase());
   const idxCallsign = findColumn(header, "callsign", "call sign");
   const idxBadge = findColumn(header, "badge number", "badge");
@@ -342,7 +366,7 @@ function cadetTableFromRows(rows, fetchStatus, source) {
   const idxRank = findColumn(header, "rank");
   const idxHireDate = findColumn(header, "hire date", "hire");
   const idxDays = findColumn(header, "days in position", "days");
-  return { rows, header, idxCallsign, idxBadge, idxName, idxRank, idxHireDate, idxDays, fetchStatus, debug: "ok", source };
+  return { rows, header, headerIdx, idxCallsign, idxBadge, idxName, idxRank, idxHireDate, idxDays, fetchStatus, debug: "ok", source };
 }
 
 let cadetTableCache = null; // { result, at }

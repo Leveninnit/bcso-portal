@@ -403,21 +403,27 @@ export async function fetchCadetRosterTable(env, { debug = false } = {}) {
     return cadetTableCache.result;
   }
   const gid = env.CADET_ROSTER_GID || DEFAULT_CADET_ROSTER_GID;
+  // debug mode always also lists every tab this API key/spreadsheet ID
+  // combo can actually see, with its gid -- attached below regardless of
+  // whether resolution "succeeds," since a wrong-but-plausible
+  // resolution (matching gid to an unrelated tab) is exactly the kind of
+  // bug that looks like success until you can see the full tab list next
+  // to it. The fastest way to tell "wrong ROSTER_SHEET_ID" apart from
+  // "gid doesn't exist" or "sharing/permissions problem" without
+  // guessing.
+  const allTabs = debug ? await listAllTabs(sheetId, apiKey) : null;
   const tabName = await resolveCadetTabName(sheetId, apiKey, gid);
   if (!tabName) {
-    // debug mode also lists every tab this API key/spreadsheet ID combo
-    // can actually see, with its gid -- the fastest way to tell "wrong
-    // ROSTER_SHEET_ID" apart from "gid doesn't exist on this sheet" or
-    // "sharing/permissions problem" without guessing.
-    const allTabs = debug ? await listAllTabs(sheetId, apiKey) : null;
     return debug ? { rows: null, debug: "could not resolve Cadet Roster tab name from gid", gid, sheetId, allTabs } : null;
   }
   const raw = await fetchRowsViaSheetsApi(sheetId, apiKey, tabName);
-  if (!raw.rows) return debug ? { ...raw, resolvedTabName: tabName, gid, sheetId } : null;
+  if (!raw.rows) return debug ? { ...raw, resolvedTabName: tabName, gid, sheetId, allTabs } : null;
   const result = cadetTableFromRows(raw.rows, raw.fetchStatus, raw.source);
   result.resolvedTabName = tabName;
   result.gid = gid;
-  if (!result.rows) return debug ? { ...result, sheetId } : null;
+  result.allTabs = allTabs;
+  result.sheetId = sheetId;
+  if (!result.rows) return debug ? result : null;
   if (!debug) cadetTableCache = { result, at: Date.now() };
   return result;
 }

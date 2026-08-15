@@ -139,6 +139,41 @@
      color: var(--gold-bright, #c9a227);
 }
 
+/* Per-subdivision category picker (Pending Review / Roster / SOP /
+   etc.) — a <select> instead of a button row so a subdivision with a
+   long category list (e.g. RTD, which also has Cadet Residency) still
+   fits on one line instead of wrapping. Not inside a .form-row, so
+   (like #ca-status-filter above) it needs its own dark styling instead
+   of falling back to the browser default. */
+.ca-inner-tabs-select-wrap {
+     display: flex;
+     align-items: center;
+     gap: 0.6rem;
+     margin-bottom: 1rem;
+     flex-wrap: wrap;
+}
+.ca-inner-tab-select-label {
+     font-size: 0.85rem;
+     color: rgba(255, 255, 255, 0.55);
+}
+.ca-inner-tab-select {
+     background: #0c1c13;
+     border: 1px solid var(--panel-border, rgba(255, 255, 255, 0.15));
+     color: var(--gold-bright, #c9a227);
+     font-weight: 600;
+     border-radius: 8px;
+     padding: 0.5rem 0.8rem;
+     font-size: 0.95rem;
+     font-family: inherit;
+     min-width: 220px;
+     cursor: pointer;
+}
+.ca-inner-tab-select:focus {
+     outline: none;
+     border-color: var(--gold, #c9a227);
+     box-shadow: 0 0 0 3px rgba(201, 162, 39, 0.15);
+}
+
 .ca-section-title {
      text-transform: uppercase;
      font-size: 0.85rem;
@@ -333,6 +368,50 @@
 .ca-cr-empty {
      color: rgba(255, 255, 255, 0.4);
      font-style: italic;
+}
+
+/* Overstayed cadets' ready-to-paste "<id> → Terminated | Overstayed
+   Residency | <date>" line (assets/command-access.js's
+   terminationLineFor) -- styled as a small copyable code box rather
+   than .ca-cr-copyable's plain dotted-underline text, since it's a
+   whole line meant to be grabbed and pasted elsewhere, not an inline
+   value. Still uses the .ca-cr-copyable class for its click-to-copy
+   behavior/state, these rules just override the box look; being
+   declared after .ca-cr-copyable above wins the tie on shared
+   properties like border-color and color. */
+.ca-cr-term-line {
+     margin-top: 0.4rem;
+     display: inline-block;
+     padding: 0.3rem 0.6rem;
+     border: 1px solid rgba(255, 255, 255, 0.15);
+     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+     border-radius: 6px;
+     background: rgba(255, 255, 255, 0.04);
+     font-family: "SFMono-Regular", Consolas, Menlo, monospace;
+     font-size: 0.8rem;
+     color: rgba(255, 255, 255, 0.85);
+}
+.ca-cr-term-line:hover {
+     border-color: var(--gold-bright, #c9a227);
+     background: rgba(201, 162, 39, 0.1);
+     color: var(--gold-bright, #c9a227);
+}
+.ca-cr-term-line.ca-cr-copied {
+     border-color: var(--gold-bright, #c9a227);
+     background: rgba(201, 162, 39, 0.1);
+}
+
+/* "Copy All Overstayed" button above the Cadet Residency list -- gold
+   outline to read as a utility action, distinct from the
+   accept/reject/delete buttons this same .ca-actions row hosts
+   elsewhere on this page. */
+.ca-actions .ca-btn-copy {
+     background: transparent;
+     border: 1px solid var(--gold-bright, #c9a227);
+     color: var(--gold-bright, #c9a227);
+}
+.ca-actions .ca-btn-copy:hover:not(:disabled) {
+     background: rgba(201, 162, 39, 0.12);
 }
 
 .ca-question-form {

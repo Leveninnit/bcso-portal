@@ -319,21 +319,42 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     const showApplications = !info.logOnly;
     if (!showApplications) activeFormType = "log";
 
+    // The per-subdivision category list (Pending Review, Roster, SOP,
+    // etc.) keeps growing (Cadet Residency, previously Leadership) and
+    // wrapped onto a second row of buttons once a subdivision had more
+    // than ~6 of them. A dropdown holds an arbitrary number of
+    // categories in the same one line, so this list is built as data
+    // (not template-per-button) and rendered as a single <select> for
+    // every subdivision, not just the crowded ones.
+    const categoryTabs = [
+      { value: "review", label: "Pending Review" },
+      { value: "customize", label: "Customize Questions" },
+      { value: "ranks", label: "Ranks" },
+      { value: "roster", label: "Roster" },
+      { value: "cadet-residency", label: "Cadet Residency", show: activeSlug === "rtd" },
+      { value: "documents", label: "Documents" },
+      { value: "sop", label: "SOP" },
+      { value: "movements", label: "Movement Templates" },
+      { value: "leadership", label: "Leadership", show: activeSlug !== "srt" },
+    ].filter((t) => t.show !== false);
+    // A stale activeInnerTab left over from a subdivision where it was
+    // valid (e.g. "cadet-residency" from RTD) but isn't here would
+    // otherwise render a <select> with no option actually selected --
+    // fall back to the first category instead of leaving it blank.
+    if (!categoryTabs.some((t) => t.value === activeInnerTab)) {
+      activeInnerTab = categoryTabs[0].value;
+    }
+
     const innerTabsHtml = `
       <div class="ca-inner-tabs" id="ca-form-type-tabs" style="display:${activeInnerTab === "documents" || activeInnerTab === "sop" ? "none" : ""};">
         ${showApplications ? `<button type="button" class="ca-inner-tab-btn" data-type="application">Applications</button>` : ""}
         <button type="button" class="ca-inner-tab-btn" data-type="log">Activity Logs</button>
       </div>
-      <div class="ca-inner-tabs" id="ca-inner-tabs">
-        <button type="button" class="ca-inner-tab-btn" data-tab="review">Pending Review</button>
-        <button type="button" class="ca-inner-tab-btn" data-tab="customize">Customize Questions</button>
-        <button type="button" class="ca-inner-tab-btn" data-tab="ranks">Ranks</button>
-        <button type="button" class="ca-inner-tab-btn" data-tab="roster">Roster</button>
-        ${activeSlug === "rtd" ? `<button type="button" class="ca-inner-tab-btn" data-tab="cadet-residency">Cadet Residency</button>` : ""}
-        <button type="button" class="ca-inner-tab-btn" data-tab="documents">Documents</button>
-        <button type="button" class="ca-inner-tab-btn" data-tab="sop">SOP</button>
-        <button type="button" class="ca-inner-tab-btn" data-tab="movements">Movement Templates</button>
-        ${activeSlug !== "srt" ? `<button type="button" class="ca-inner-tab-btn" data-tab="leadership">Leadership</button>` : ""}
+      <div class="ca-inner-tabs-select-wrap">
+        <label for="ca-inner-tab-select" class="ca-inner-tab-select-label">Category:</label>
+        <select id="ca-inner-tab-select" class="ca-inner-tab-select">
+          ${categoryTabs.map((t) => `<option value="${t.value}"${t.value === activeInnerTab ? " selected" : ""}>${t.label}</option>`).join("")}
+        </select>
       </div>
       <div id="ca-panel"></div>
     `;
@@ -346,13 +367,13 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         renderSubContent();
       });
     });
-    container.querySelectorAll("#ca-inner-tabs button").forEach((btn) => {
-      btn.classList.toggle("active", btn.dataset.tab === activeInnerTab);
-      btn.addEventListener("click", () => {
-        activeInnerTab = btn.dataset.tab;
+    const categorySelect = el("ca-inner-tab-select");
+    if (categorySelect) {
+      categorySelect.addEventListener("change", () => {
+        activeInnerTab = categorySelect.value;
         renderSubContent();
       });
-    });
+    }
 
     if (activeInnerTab === "review") {
       renderReviewPanel();
@@ -927,12 +948,35 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     `;
   }
 
+  // M/D/YYYY, no leading zeros -- matches the Hire Date style already
+  // shown on this tab straight from the sheet, so the termination line
+  // below reads consistently with the rest of the panel.
+  function formatTerminationDate(d) {
+    return `${d.getMonth() + 1}/${d.getDate()}/${d.getFullYear()}`;
+  }
+
+  // The line command staff actually paste into wherever they log a
+  // removal (Discord termination channel, Department Terminations
+  // sheet, etc.) -- built once per render so every overstayed cadet's
+  // line uses the same "today" even if rendering takes a moment.
+  function terminationLineFor(e, dateStr) {
+    const id = e.discordId || e.characterName || "Unknown";
+    return `${id} → Terminated | Overstayed Residency | ${dateStr}`;
+  }
+
   function renderCadetResidencyContent(panel, entries, limitDays) {
     const desc = `Everyone on the Master Roster currently ranked "Cadet", and how many days they've held that rank (pulled straight from the sheet). Anyone at ${limitDays} days or more is flagged as needing to be removed for overstaying their residency period. Discord ID is resolved automatically from the Master Roster by badge number — click one to copy it. This list is read-only here; removals are made directly on the sheet.`;
+    const dateStr = formatTerminationDate(new Date());
+    const overstayed = entries.filter((e) => e.overstayed);
     panel.innerHTML = `
       <div class="panel">
         <p class="ca-section-title">${subInfo(activeSlug).short} Cadet Residency</p>
         <p class="ca-muted">${desc}</p>
+        ${
+          overstayed.length
+            ? `<div class="ca-actions"><button type="button" class="ca-btn-copy" id="ca-cr-copy-all">Copy All Overstayed (${overstayed.length})</button></div>`
+            : ""
+        }
         <div id="ca-cadet-residency-list"></div>
       </div>
     `;
@@ -941,11 +985,29 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       list.innerHTML = `<p class="ca-muted">No one is currently ranked "Cadet" on the Cadet Roster sheet.</p>`;
       return;
     }
-    list.innerHTML = entries.map((e) => renderCadetResidencyRow(e)).join("");
+    list.innerHTML = entries.map((e) => renderCadetResidencyRow(e, dateStr)).join("");
     setupCadetResidencyCopy(list);
+
+    const copyAllBtn = el("ca-cr-copy-all");
+    if (copyAllBtn) {
+      copyAllBtn.addEventListener("click", async () => {
+        const text = overstayed.map((e) => terminationLineFor(e, dateStr)).join("\n");
+        try {
+          await navigator.clipboard.writeText(text);
+        } catch {
+          return;
+        }
+        clearTimeout(copyAllBtn._crCopyTimeout);
+        if (copyAllBtn._crCopyOriginal === undefined) copyAllBtn._crCopyOriginal = copyAllBtn.textContent;
+        copyAllBtn.textContent = "Copied!";
+        copyAllBtn._crCopyTimeout = setTimeout(() => {
+          copyAllBtn.textContent = copyAllBtn._crCopyOriginal;
+        }, 1100);
+      });
+    }
   }
 
-  function renderCadetResidencyRow(e) {
+  function renderCadetResidencyRow(e, dateStr) {
     const badge = escapeHtml(e.badgeNumber || "");
     const callsign = e.callsign ? `${escapeHtml(e.callsign)} &middot; ` : "";
     const name = e.characterName ? escapeHtml(e.characterName) : "(not on Master Roster)";
@@ -954,12 +1016,24 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
       : `<span class="ca-cr-empty">&mdash;</span>`;
     const days = e.daysInPosition;
     const dayLabel = days === null ? "days in Cadet unknown" : `${days} day${days === 1 ? "" : "s"} in Cadet`;
+    // Overstayed cadets get a ready-to-paste "<id> → Terminated |
+    // Overstayed Residency | <date>" line, click-to-copy same as the
+    // Discord ID above -- reuses the existing .ca-cr-copyable click
+    // handler (setupCadetResidencyCopy), no separate wiring needed.
+    const terminationLine = e.overstayed ? terminationLineFor(e, dateStr) : "";
     return `
       <div class="ca-question-row ca-cr-row${e.overstayed ? " ca-cr-row-overstayed" : ""}">
         <div>
           <strong>${callsign}${name}</strong> &middot; Badge ${badge}
           <div class="ca-question-meta">${discordHtml} &middot; ${dayLabel}</div>
           ${e.overstayed ? `<div class="ca-cr-flag">Needs to be removed — overstayed residency</div>` : ""}
+          ${
+            e.overstayed
+              ? `<div class="ca-cr-term-line ca-cr-copyable" data-copy="${escapeHtml(terminationLine)}" title="Click to copy">${escapeHtml(
+                  terminationLine
+                )}</div>`
+              : ""
+          }
         </div>
       </div>
     `;

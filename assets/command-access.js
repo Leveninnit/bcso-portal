@@ -899,6 +899,15 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
         renderCadetResidencyError(panel, data.error || "Couldn't load Cadet Residency.");
         return;
       }
+      // If the sheet fetch worked but nothing matched, data.debug carries
+      // what the parser actually saw (raw row count, which header row it
+      // picked, which columns it found) -- logged to the console rather
+      // than shown in the UI so it doesn't clutter the panel, but it's
+      // there to check (Command Access page -> DevTools console) if this
+      // ever shows empty when it shouldn't.
+      if ((!data.entries || !data.entries.length) && data.debug) {
+        console.warn("[Cadet Residency] no cadets matched -- sheet parse debug:", data.debug);
+      }
       renderCadetResidencyContent(panel, data.entries || [], data.limitDays || 14);
     } catch {
       renderCadetResidencyError(panel, "Couldn't load Cadet Residency. Try refreshing.");

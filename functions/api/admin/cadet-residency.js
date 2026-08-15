@@ -3,21 +3,26 @@
  * GET /api/admin/cadet-residency?div=slug
  *
  * "Cadet Residency" -- Command Access -> RTD -> Cadet Residency. Lists
- * every row on the Master Roster Google Sheet's "Cadet Roster" tab
+ * every row on the Master Roster Google Sheet's cadet-tracking tab
  * (NOT this subdivision's own D1-backed Roster -- see
- * functions/api/admin/roster.js, which is a separate, unrelated list)
- * currently ranked "Cadet" (case-insensitive, trimmed match -- same
- * convention used for rank matching elsewhere in this codebase), how
- * many days they've held that rank, and flags anyone at or over BCSO's
- * 14-day cadet residency limit as needing to be removed.
+ * functions/api/admin/roster.js, which is a separate, unrelated list;
+ * and NOT literally a tab titled "Cadet Roster" either -- in this
+ * spreadsheet it's the tab titled "BCSO | Department Personnel". See
+ * functions/_lib/roster-sheet.js's fetchCadetRosterTable for how that
+ * tab is resolved -- by tab name/gid, not a hardcoded title, so a
+ * rename doesn't silently break this) currently ranked "Cadet"
+ * (case-insensitive, trimmed match -- same convention used for rank
+ * matching elsewhere in this codebase), how many days they've held
+ * that rank, and flags anyone at or over BCSO's 14-day cadet residency
+ * limit as needing to be removed.
  *
  * "How long they've held that rank" is read directly from the sheet's
  * own "Days in Position" column (command staff maintain it there) --
  * no date math or D1 tracking needed on this end.
  *
- * Discord ID isn't a column on the Cadet Roster tab, so it's resolved
- * live from the Employee Database tab by Badge Number, same as the
- * public Roster (functions/api/roster.js).
+ * Discord ID isn't a column on that tab, so it's resolved live from
+ * the Employee Database tab by Badge Number, same as the public
+ * Roster (functions/api/roster.js).
  *
  * This is display-only -- there's no write access to the Google Sheet
  * from this codebase, so there's no Remove action here. Command staff
@@ -116,7 +121,7 @@ export async function onRequestGet(context) {
     );
   }
 
-  // Discord ID isn't on the Cadet Roster tab -- resolved live from the
+  // Discord ID isn't on the cadet-tracking tab -- resolved live from the
   // Employee Database tab by badge number, same as the public roster.
   // Fails soft: if the sheet can't be reached, entries still render
   // with a blank Discord ID rather than the whole panel breaking.

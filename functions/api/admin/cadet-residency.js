@@ -101,6 +101,7 @@ export async function onRequestGet(context) {
           rawRowCount: cadetTable.rows.length,
           headerIdx: cadetTable.headerIdx,
           header: cadetTable.header,
+          rawSample: cadetTable.rawSample,
           columnsFound: {
             callsign: cadetTable.idxCallsign,
             badge: cadetTable.idxBadge,

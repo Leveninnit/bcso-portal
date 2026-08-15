@@ -7,9 +7,18 @@
  *     every member, keyed by Badge Number / Discord ID. Used by:
  *       - functions/api/roster-lookup.js  (autofill on Apply/Log forms, by Discord ID)
  *       - functions/api/roster.js         (public per-subdivision Roster view, by Badge Number)
- *   - "Cadet Roster" (identified by gid, see CADET_ROSTER_GID below) —
- *     a separate tab command staff maintain with one row per cadet and
- *     an already-computed "Days in Position" column. Used by:
+ *   - the cadet-tracking tab (resolved by name match on "cadet roster",
+ *     falling back to gid -- see CADET_ROSTER_GID/resolveCadetTabName
+ *     below) — a separate tab command staff maintain with one row per
+ *     cadet and an already-computed "Days in Position" column. NOTE:
+ *     despite the name-matching logic, this tab is not actually titled
+ *     "Cadet Roster" in the live spreadsheet -- it's titled "BCSO |
+ *     Department Personnel", found purely via the gid fallback (a gid
+ *     handed to this code once silently resolved to a *different*,
+ *     unrelated tab with the same generic name pattern -- see the git
+ *     history on this file for that whole saga). Resolving primarily
+ *     by name is still worth keeping for whichever spreadsheet next
+ *     actually does title its tab "Cadet Roster". Used by:
  *       - functions/api/admin/cadet-residency.js (Command Access -> RTD -> Cadet Residency)
  *
  * Two ways to read a tab, tried in this order:

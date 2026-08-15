@@ -958,9 +958,14 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   // The line command staff actually paste into wherever they log a
   // removal (Discord termination channel, Department Terminations
   // sheet, etc.) -- built once per render so every overstayed cadet's
-  // line uses the same "today" even if rendering takes a moment.
+  // line uses the same "today" even if rendering takes a moment. When a
+  // Discord ID is known it's wrapped as <@id>, same convention as the
+  // Movement Templates copy lines (see renderMovementResults) -- pasted
+  // into a Discord channel this actually pings the cadet rather than
+  // showing a bare, non-clickable number. Falls back to plain character
+  // name/"Unknown" when there's no Discord ID to ping.
   function terminationLineFor(e, dateStr) {
-    const id = e.discordId || e.characterName || "Unknown";
+    const id = e.discordId ? `<@${e.discordId}>` : e.characterName || "Unknown";
     return `${id} → Terminated | Overstayed Residency | ${dateStr}`;
   }
 
@@ -1011,8 +1016,12 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
     const badge = escapeHtml(e.badgeNumber || "");
     const callsign = e.callsign ? `${escapeHtml(e.callsign)} &middot; ` : "";
     const name = e.characterName ? escapeHtml(e.characterName) : "(not on Master Roster)";
-    const discordHtml = e.discordId
-      ? `<span class="ca-cr-copyable" data-copy="${escapeHtml(e.discordId)}" title="Click to copy">${escapeHtml(e.discordId)}</span>`
+    // Shown (and copied) as a Discord mention <@id>, not the bare
+    // numeric ID -- same convention as terminationLineFor below, so
+    // pasting it into Discord actually pings the cadet.
+    const discordMention = e.discordId ? `<@${e.discordId}>` : "";
+    const discordHtml = discordMention
+      ? `<span class="ca-cr-copyable" data-copy="${escapeHtml(discordMention)}" title="Click to copy">${escapeHtml(discordMention)}</span>`
       : `<span class="ca-cr-empty">&mdash;</span>`;
     const days = e.daysInPosition;
     const dayLabel = days === null ? "days in Cadet unknown" : `${days} day${days === 1 ? "" : "s"} in Cadet`;

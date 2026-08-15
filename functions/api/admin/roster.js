@@ -90,9 +90,12 @@ export async function onRequestPost(context) {
   // milliseconds of each other used to be able to both read the same
   // MAX(sort_order) from a standalone SELECT and then both insert with
   // the same computed value, silently tying two entries on order.
+  // rank_since starts now, same as created_at -- a brand-new entry's
+  // rank obviously hasn't been held any longer than this (see
+  // functions/api/admin/cadet-residency.js, which reads this column).
   await env.DB.prepare(
-    `INSERT INTO roster_entries (subdivision_slug, rank, badge_number, callsign, notes, sort_order)
-     VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM roster_entries WHERE subdivision_slug = ?))`
+    `INSERT INTO roster_entries (subdivision_slug, rank, badge_number, callsign, notes, sort_order, rank_since)
+     VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order), 0) + 1 FROM roster_entries WHERE subdivision_slug = ?), datetime('now'))`
   )
     .bind(
       body.subdivisionSlug,
@@ -118,16 +121,30 @@ export async function onRequestPut(context) {
   const session = await requireSession(request, env, body.subdivisionSlug);
   if (!session) return jsonResponse({ error: "Unauthorized." }, 401);
 
+  const newRank = (body.rank || "").toString().trim().slice(0, 100);
+  // rank_since only resets when the Rank text actually changes (compared
+  // case-insensitively/trimmed, same convention as the rank-hierarchy
+  // matching in functions/api/roster.js) -- editing the badge number,
+  // notes, or sort order alone leaves it untouched. The CASE compares
+  // against the row's own pre-update `rank` column value, so this stays
+  // a single atomic statement instead of a SELECT-then-UPDATE.
   const updateResult = await env.DB.prepare(
-    `UPDATE roster_entries SET rank = ?, badge_number = ?, callsign = ?, notes = ?, sort_order = ?, updated_at = datetime('now')
+    `UPDATE roster_entries
+     SET rank = ?, badge_number = ?, callsign = ?, notes = ?, sort_order = ?,
+         rank_since = CASE
+           WHEN LOWER(TRIM(rank)) = LOWER(TRIM(?)) THEN COALESCE(rank_since, datetime('now'))
+           ELSE datetime('now')
+         END,
+         updated_at = datetime('now')
      WHERE id = ? AND subdivision_slug = ?`
   )
     .bind(
-      (body.rank || "").toString().trim().slice(0, 100),
+      newRank,
       body.badgeNumber.trim().slice(0, 30),
       (body.callsign || "").toString().trim().slice(0, 30),
       (body.notes || "").toString().trim().slice(0, 300),
       Number.isFinite(body.sortOrder) ? body.sortOrder : 0,
+      newRank,
       body.id,
       body.subdivisionSlug
     )

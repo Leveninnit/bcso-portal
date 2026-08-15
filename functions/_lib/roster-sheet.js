@@ -28,7 +28,7 @@
  *                               exact name, defaults to "Employee
  *                               Database". Not used for the Cadet
  *                               Roster tab — that one is looked up by
- *                               gid instead (see resolveTabNameByGid),
+ *                               gid instead (see resolveCadetTabName),
  *                               since it isn't published to web (see
  *                               below) and its exact display name isn't
  *                               otherwise known to this code.
@@ -326,16 +326,31 @@ export function lookupByBadge(table, badgeNumber) {
 // The Cadet Roster tab isn't "Published to web," so it can't be read by
 // gid via CSV export (that returns 401 anonymously) -- only the Sheets
 // API can read it, and that endpoint addresses tabs by name, not gid.
-// This resolves the tab's current display name from its gid via the
-// spreadsheet metadata endpoint, so command staff don't have to keep an
-// env var in sync with the tab's exact title (which can be renamed).
-// Cached with a longer TTL than the row data itself since a tab's name
+//
+// This resolves the tab to read primarily by NAME (any tab titled
+// "Cadet Roster", case-insensitively, with or without extra words
+// around it) rather than trusting a gid -- a gid taken from a URL a
+// human copied is one stale copy/paste away from silently pointing at
+// a *different* tab entirely (confirmed in practice: a gid handed to
+// this code once resolved to an unrelated "BCSO | Department
+// Personnel" tab with 600+ rows of garbage, and every column lookup
+// against it just silently returned nothing). A tab's title is far
+// less likely to drift out from under an env var than its gid is to
+// survive being copy-pasted correctly, since gids change if the tab is
+// ever deleted/recreated but the title is what command staff actually
+// look at and set on purpose.
+//
+// Falls back to gid-matching (the old behavior, CADET_ROSTER_GID/
+// DEFAULT_CADET_ROSTER_GID) only if no tab title looks like a Cadet
+// Roster at all, in case the tab is deliberately named something else
+// -- so this is a strict improvement, not a behavior removal. Cached
+// with a longer TTL than the row data itself since a tab's name/gid
 // changes far less often than its contents.
 let tabNameCache = null; // { key, name, at }
 const TAB_NAME_CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes -- renamed rarely
 
-async function resolveTabNameByGid(sheetId, apiKey, gid) {
-  const cacheKey = `${sheetId}:${gid}`;
+async function resolveCadetTabName(sheetId, apiKey, gidFallback) {
+  const cacheKey = `${sheetId}:${gidFallback}`;
   if (tabNameCache && tabNameCache.key === cacheKey && Date.now() - tabNameCache.at < TAB_NAME_CACHE_TTL_MS) {
     return tabNameCache.name;
   }
@@ -345,7 +360,9 @@ async function resolveTabNameByGid(sheetId, apiKey, gid) {
     if (!res.ok) return null;
     const data = await res.json();
     const sheets = data.sheets || [];
-    const match = sheets.find((s) => String(s.properties?.sheetId) === String(gid));
+    const byName = sheets.find((s) => /cadet\s*roster/i.test(s.properties?.title || ""));
+    const byGid = byName ? null : sheets.find((s) => String(s.properties?.sheetId) === String(gidFallback));
+    const match = byName || byGid;
     if (!match) return null;
     const name = match.properties.title;
     tabNameCache = { key: cacheKey, name, at: Date.now() };
@@ -386,7 +403,7 @@ export async function fetchCadetRosterTable(env, { debug = false } = {}) {
     return cadetTableCache.result;
   }
   const gid = env.CADET_ROSTER_GID || DEFAULT_CADET_ROSTER_GID;
-  const tabName = await resolveTabNameByGid(sheetId, apiKey, gid);
+  const tabName = await resolveCadetTabName(sheetId, apiKey, gid);
   if (!tabName) {
     // debug mode also lists every tab this API key/spreadsheet ID combo
     // can actually see, with its gid -- the fastest way to tell "wrong

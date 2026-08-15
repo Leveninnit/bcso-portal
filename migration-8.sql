@@ -1,0 +1,35 @@
+-- BCSO Portal — Migration 8 (Cloudflare D1 / SQLite)
+--
+-- SKIP THIS FILE if you're setting up a brand-new database: schema.sql
+-- was updated to already include the rank_since column below. Just run
+-- schema.sql and you're done. This file is only for a database set up
+-- before that consolidation that hasn't run this migration yet.
+--
+-- Adds roster_entries.rank_since: tracks when a roster entry's Rank
+-- field was last changed to its current value -- NOT just any edit
+-- (unlike the existing updated_at column, which touches on every save,
+-- including notes-only or badge-only changes with no rank change at
+-- all). functions/api/admin/roster.js's PUT handler only refreshes this
+-- when the Rank text actually changes, so promoting someone out of a
+-- rank and back into it later correctly restarts the clock instead of
+-- carrying over their old time-in-rank.
+--
+-- This powers RTD's new Cadet Residency panel (Command Access -> RTD ->
+-- Cadet Residency, see functions/api/admin/cadet-residency.js), which
+-- lists everyone on the Roster currently ranked "Cadet" and flags anyone
+-- who's been there more than 14 days as needing to be removed for
+-- overstaying their residency period.
+--
+-- SQLite won't allow ALTER TABLE ADD COLUMN with a non-constant default
+-- like datetime('now'), so this adds the column as nullable first, then
+-- backfills every existing row with today's date/time as a starting
+-- point -- there's no way to know historically when each row's current
+-- rank actually began, so existing Cadets (if any) get a fresh 14-day
+-- clock starting now rather than instantly showing as overstayed.
+--
+-- Run this once against your D1 database (Cloudflare dashboard ->
+-- Workers & Pages -> your Pages project -> D1 -> your database ->
+-- Console, paste this whole file and execute).
+
+ALTER TABLE roster_entries ADD COLUMN rank_since TEXT;
+UPDATE roster_entries SET rank_since = datetime('now') WHERE rank_since IS NULL;

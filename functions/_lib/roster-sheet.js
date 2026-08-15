@@ -163,7 +163,7 @@ function findColumn(header, ...candidates) {
 // skip anything above it. Falls back to 0 (old behavior) if nothing
 // looks like a header within the scan window, so a tab that genuinely
 // starts with its header row is unaffected.
-function locateHeaderRow(rows, keywords, maxScan = 5) {
+function locateHeaderRow(rows, keywords, maxScan = 20) {
   for (let i = 0; i < Math.min(maxScan, rows.length); i++) {
     const cells = (rows[i] || []).map((c) => (c || "").toString().trim().toLowerCase());
     const matches = keywords.filter((k) => cells.some((c) => c === k || c.includes(k))).length;
@@ -418,10 +418,18 @@ export async function fetchCadetRosterTable(env, { debug = false } = {}) {
   }
   const raw = await fetchRowsViaSheetsApi(sheetId, apiKey, tabName);
   if (!raw.rows) return debug ? { ...raw, resolvedTabName: tabName, gid, sheetId, allTabs } : null;
+  // debug mode also keeps an unprocessed sample of the first 20 rows
+  // exactly as the Sheets API returned them, before locateHeaderRow does
+  // anything to them -- so a layout this code guesses wrong about (e.g.
+  // real header further down than the 5-row scan window, or a totally
+  // different column set than expected) can be read directly instead of
+  // inferred from which column indices came back -1.
+  const rawSample = debug ? raw.rows.slice(0, 20) : null;
   const result = cadetTableFromRows(raw.rows, raw.fetchStatus, raw.source);
   result.resolvedTabName = tabName;
   result.gid = gid;
   result.allTabs = allTabs;
+  result.rawSample = rawSample;
   result.sheetId = sheetId;
   if (!result.rows) return debug ? result : null;
   if (!debug) cadetTableCache = { result, at: Date.now() };

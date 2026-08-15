@@ -96,6 +96,8 @@ export async function onRequestGet(context) {
         debug: {
           resolvedTabName: cadetTable.resolvedTabName,
           gid: cadetTable.gid,
+          sheetId: cadetTable.sheetId,
+          allTabs: cadetTable.allTabs,
           rawRowCount: cadetTable.rows.length,
           headerIdx: cadetTable.headerIdx,
           header: cadetTable.header,

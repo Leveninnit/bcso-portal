@@ -872,7 +872,11 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
 
   // ---------------------------------------------------------------------
   // Cadet Residency (RTD only) — every row on the Master Roster Google
-  // Sheet's "Cadet Roster" tab currently ranked "Cadet", how many days
+  // Sheet's cadet-tracking tab (resolved dynamically by tab name/gid —
+  // see functions/_lib/roster-sheet.js's fetchCadetRosterTable, since
+  // the actual tab title in this spreadsheet is "BCSO | Department
+  // Personnel", not literally "Cadet Roster") currently ranked "Cadet",
+  // how many days
   // they've held that rank (read straight from the sheet's own "Days in
   // Position" column — see functions/api/admin/cadet-residency.js and
   // functions/_lib/roster-sheet.js), and a flag for anyone at/over the
@@ -924,7 +928,7 @@ let pendingHighlight = null; // id from a deep link (?div=&type=&id=), consumed 
   }
 
   function renderCadetResidencyContent(panel, entries, limitDays) {
-    const desc = `Everyone on the Master Roster's Cadet Roster tab currently ranked "Cadet", and how many days they've held that rank (pulled straight from the sheet). Anyone at ${limitDays} days or more is flagged as needing to be removed for overstaying their residency period. Discord ID is resolved automatically from the Master Roster by badge number — click one to copy it. This list is read-only here; removals are made directly on the sheet.`;
+    const desc = `Everyone on the Master Roster currently ranked "Cadet", and how many days they've held that rank (pulled straight from the sheet). Anyone at ${limitDays} days or more is flagged as needing to be removed for overstaying their residency period. Discord ID is resolved automatically from the Master Roster by badge number — click one to copy it. This list is read-only here; removals are made directly on the sheet.`;
     panel.innerHTML = `
       <div class="panel">
         <p class="ca-section-title">${subInfo(activeSlug).short} Cadet Residency</p>

@@ -218,15 +218,6 @@ INSERT OR IGNORE INTO site_content (content_key, value_json) VALUES
 -- the roster never goes stale when someone's name changes on the Master
 -- Roster.
 --
--- rank_since (originally added by migration-8.sql): when this entry's
--- Rank field was last changed to its current value -- NOT just any edit
--- (unlike updated_at, which touches on every save including notes-only
--- changes). functions/api/admin/roster.js's PUT handler only refreshes
--- this when the Rank text actually changes, so promoting someone out of
--- a rank and back into it later correctly restarts the clock. Powers
--- RTD's Cadet Residency panel (Command Access -> RTD -> Cadet
--- Residency, see functions/api/admin/cadet-residency.js), which flags
--- anyone ranked "Cadet" for more than 14 days as needing to be removed.
 CREATE TABLE IF NOT EXISTS roster_entries (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   subdivision_slug TEXT NOT NULL,
@@ -235,7 +226,6 @@ CREATE TABLE IF NOT EXISTS roster_entries (
   callsign TEXT NOT NULL DEFAULT '',
   notes TEXT NOT NULL DEFAULT '',
   sort_order INTEGER NOT NULL DEFAULT 0,
-  rank_since TEXT,
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
